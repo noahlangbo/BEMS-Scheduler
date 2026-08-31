@@ -133,6 +133,10 @@ def _find_nth_header(headers: list[str], exact: str, n: int) -> int:
 
 def _build_column_maps(headers: list[str], block_start: date, block_end: date) -> dict:
     emt_day, emt_night, emt_weekend, emt_week, bert = {}, {}, {}, {}, {}
+    if block_end < block_start:
+        raise ValueError("block_end must be on or after block_start.")
+    bert_section = _find_nth_header(headers, "Last Name", 1)
+    unrecognized = []
 
     for i, h in enumerate(headers):
         hh = (h or "").strip()
@@ -155,6 +159,28 @@ def _build_column_maps(headers: list[str], block_start: date, block_end: date) -
             emt_week[i] = d
         elif "campus response availability" in low or ("availability" in low and "a/b" in low):
             bert[i] = d
+        # Shopping-period form: categorized ambulance grids and a plain CR grid.
+        # Google Forms appends new questions at the END of the response sheet,
+        # so classify explicit categories before using the CR section boundary.
+        elif low.startswith("please indicate your availability for the below dates and shifts."):
+            category = re.search(r"\(([^)]+)\)\s*\[", low)
+            label = category.group(1).strip() if category else ""
+            if label in ("weekday nights", "weekend nights"):
+                emt_night[i] = d
+            elif label == "weekend days":
+                emt_weekend[i] = d
+            elif label == "weekdays":
+                emt_week[i] = d
+            elif not label and bert_section >= 0 and i > bert_section:
+                bert[i] = d
+            else:
+                unrecognized.append(hh)
+        else:
+            unrecognized.append(hh)
+
+    if unrecognized:
+        raise ValueError("Unrecognized availability columns: " + "; ".join(unrecognized)
+                         + ". Update the importer before scheduling; answers were not discarded.")
 
     def find(exact: str) -> int:
         return next((i for i, h in enumerate(headers) if (h or "").strip() == exact), -1)
@@ -293,6 +319,9 @@ def load_all_responses(
     headers, data_rows = rows[0], rows[1:]
     maps = _build_column_maps(headers, block_start, block_end)
     year = block_start.year
+    for field in ("idx_email", "idx_role"):
+        if maps[field] < 0:
+            raise ValueError(f"Missing required form column: {field}. Check the CSV export.")
 
     # Latest submission per email, split by role.
     latest_emt: dict[str, tuple[datetime, list[str]]] = {}
@@ -304,8 +333,23 @@ def load_all_responses(
         ts = _parse_timestamp(_safe(row, maps["idx_ts"]))
         role = _safe(row, maps["idx_role"])
         bucket = latest_bert if _is_bert_role(role) else latest_emt if _is_emt_role(role) else None
+        if bucket is None:
+            raise ValueError(f"Unrecognized member role {role!r}. Update the importer before scheduling.")
         if bucket is not None and (email not in bucket or ts > bucket[email][0]):
             bucket[email] = (ts, row)
+
+    # A legitimate response with no availability is allowed. An entire missing
+    # question family is not: that usually means changed headers or wrong dates.
+    for bucket, families, fields, label in (
+        (latest_emt, ("emt_day", "emt_night", "emt_weekend", "emt_week"),
+         ("idx_emt_first", "idx_emt_last", "idx_driver"), "Ambulance"),
+        (latest_bert, ("bert",), ("idx_bert_first", "idx_bert_last"), "Campus Response"),
+    ):
+        if bucket and not any(maps[k] for k in families):
+            raise ValueError(f"No recognized {label} availability columns within "
+                             f"{block_start} to {block_end}. Check block dates and CSV headers.")
+        if bucket and any(maps[k] < 0 for k in fields):
+            raise ValueError(f"Missing required {label} identity/certification columns.")
 
     volunteers: list[Volunteer] = []
     for email, (_, row) in latest_emt.items():
