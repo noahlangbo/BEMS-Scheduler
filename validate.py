@@ -27,6 +27,12 @@ class AvailabilityRequirements:
     emt_min_weekend_shifts: int = 1  # weekend DAY or NIGHT selections
     bert_min_ab_blocks: int = 1      # A or B selections
     bert_min_cd_blocks: int = 1      # C or D selections
+    # Optional separate categories. None preserves historical config behavior.
+    emt_min_weekday_am: int | None = None
+    emt_min_weekday_pm: int | None = None
+    emt_min_weekday_night: int | None = None
+    emt_min_weekend_day: int | None = None
+    emt_min_weekend_night: int | None = None
 
     @classmethod
     def from_config(cls, cfg: dict) -> "AvailabilityRequirements":
@@ -39,6 +45,11 @@ class AvailabilityRequirements:
             emt_min_weekend_shifts=int(emt.get("min_weekend_shifts", 1)),
             bert_min_ab_blocks=int(bert.get("min_ab_blocks", 1)),
             bert_min_cd_blocks=int(bert.get("min_cd_blocks", 1)),
+            **{
+                "emt_" + key: int(emt[key]) if key in emt else None
+                for key in ("min_weekday_am", "min_weekday_pm", "min_weekday_night",
+                            "min_weekend_day", "min_weekend_night")
+            },
         )
 
 
@@ -58,6 +69,23 @@ def check_ambulance_requirements(
             missing.append(f"night shifts ({night}/{reqs.emt_min_night_shifts})")
         if weekend < reqs.emt_min_weekend_shifts:
             missing.append(f"weekend shifts ({weekend}/{reqs.emt_min_weekend_shifts})")
+        # Availability policy differs from calendar weekends: Friday/Saturday
+        # NIGHT are weekend nights; Sunday NIGHT is a weekday night.
+        separate = (
+            ("Weekday AM", reqs.emt_min_weekday_am,
+             sum(d.weekday() < 5 and s == "AM" for d, s in v.available)),
+            ("Weekday PM", reqs.emt_min_weekday_pm,
+             sum(d.weekday() < 5 and s == "PM" for d, s in v.available)),
+            ("Weekday NIGHT", reqs.emt_min_weekday_night,
+             sum(d.weekday() not in (4, 5) and s == "NIGHT" for d, s in v.available)),
+            ("Weekend DAY", reqs.emt_min_weekend_day,
+             sum(d.weekday() in (5, 6) and s == "DAY" for d, s in v.available)),
+            ("Weekend NIGHT", reqs.emt_min_weekend_night,
+             sum(d.weekday() in (4, 5) and s == "NIGHT" for d, s in v.available)),
+        )
+        for label, minimum, count in separate:
+            if minimum is not None and count < minimum:
+                missing.append(f"{label} ({count}/{minimum})")
         if missing:
             violations.append({"volunteer": v, "missing": missing})
     return violations
