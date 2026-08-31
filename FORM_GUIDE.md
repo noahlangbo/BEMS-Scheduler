@@ -1,5 +1,23 @@
 # Google Form Guide
 
+## Existing Fall 2026 shopping-period form
+
+No form edits are needed. The importer supports the existing question prefix
+`Please indicate your availability for the below dates and shifts.` with
+`(Weekdays)`, `(Weekend Nights)`, `(Weekend Days)`, and `(Weekday Nights)`
+categories. The plain question in the second name section is the CR grid.
+Explicit categories take priority over column position, including new Sunday
+night questions appended after the CR questions by Google Forms.
+
+Export a fresh CSV after adding questions. Keep the duplicated First Name and
+Last Name columns: they belong to the separate EMT and BERT branches.
+The parser combines repeated date/shift selections once and retains the latest
+response per email within each role. Unrecognized dated headers and incompatible
+block dates produce a clear error before scheduling.
+
+The remaining guide documents the alternative weekly and legacy formats,
+which remain supported. It is not a request to redesign the current form.
+
 How to build the availability form so that (a) students can fill it out day by
 day against their Google Calendar, and (b) the CSV export parses with zero
 manual cleanup. The parser ([parse_form.py](parse_form.py)) reads this format
