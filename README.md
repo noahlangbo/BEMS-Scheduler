@@ -94,12 +94,35 @@ they need a human conversation, not a better algorithm.
 It is deliberately a local export only; review it, then paste the rows into the
 Sheet. The scheduler never calls the Google Sheets or Google Calendar APIs.
 
-For F26B1, `config.json` is set to August 10–September 3, 2026 and a day
-number start of `810`. Populate `als_shifts` from the approved F26B1 ALS list
-before each live run—the historical Spring list was removed rather than reused.
-The parser accepts both the legacy separate-shift grids and the current
-weekly-grid form format, so the availability-format decision does not require
-code changes as long as the documented header phrases are retained.
+### Fall 2026 shopping period
+
+`config.json` now schedules September 8 through September 20, 2026. It uses
+export block `F26SHOP`, day number start `908`, 12 ambulance hours plus 3 CR
+hours per EMT, and 3 CR hours per BERT member. `als_shifts` remains empty;
+populate it from the approved ALS coverage list before a live scheduling run.
+
+The existing shopping-period form does not need to be renamed or redesigned.
+The importer accepts its "Please indicate your availability for the below
+dates and shifts." grids, including Weekdays, Weekend Nights, Weekend Days,
+and Weekday Nights. The Sunday-night columns appended after the CR section
+are treated as ambulance availability, not CR. The plain CR grid remains
+separate. Historical separate-shift and named weekly grids are still supported.
+
+The five ambulance availability minimums are checked independently: one
+weekday AM, one weekday PM, one weekday NIGHT, one weekend DAY, and one
+weekend NIGHT. Friday/Saturday NIGHT count as weekend nights; Sunday NIGHT
+counts as a weekday night. CR minimums remain one A/B and one C/D selection.
+These are availability checks, not additional assigned-hour requirements.
+
+Download a fresh CSV from the response sheet and save it as
+`form_responses.csv` in this directory, then run `.venv/bin/python main.py`.
+The importer now stops on unrecognized dated columns, unknown roles, missing
+identity headers, or no matching in-block availability columns for a submitted
+role. It never silently turns a header/date mismatch into an empty schedule.
+
+Run regression tests with `.venv/bin/python -m unittest discover -s tests -v`.
+The shopping-period fixture contains relevant form headers and synthetic test
+responses only. No real response data is committed.
 
 ## Files
 
