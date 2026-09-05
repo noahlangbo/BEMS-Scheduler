@@ -444,12 +444,13 @@ def _ambulance_master_rows(assignments, block_start, block, daynum_start, vehicl
     for (d, shift), people in sorted(assignments.items()):
         daynum = _day_number(d, block_start, daynum_start)
         # Preserve every assignment while putting the preferred driver in the
-        # driver's row.  The previous draft dropped additional driver-eligible
+        # driver's row. The previous draft dropped additional driver-eligible
         # crew members entirely.
         primary_driver = next((p for p in people if getattr(p, "is_driver", False)), None)
-        # Keep exported seats within the solver cap when a driver exception is
-        # allowed: put the first responder in Driver and retain the exception.
-        driver_exception = primary_driver is None and bool(people)
+        # Only use a non-driver as the Driver-seat exception when the shift is
+        # otherwise full. If a crew seat is still open, keep Driver blank and
+        # put the EMT in C2/C3/C4 instead.
+        driver_exception = primary_driver is None and len(people) >= crew_cap(d, shift)
         if driver_exception:
             primary_driver = people[0]
         ordered = [primary_driver] + [p for p in people if p is not primary_driver]
