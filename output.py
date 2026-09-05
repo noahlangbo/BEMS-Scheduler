@@ -443,17 +443,43 @@ def _ambulance_master_rows(assignments, block_start, block, daynum_start, vehicl
     rows = []
     for (d, shift), people in sorted(assignments.items()):
         daynum = _day_number(d, block_start, daynum_start)
-        # Preserve every assignment while putting the preferred driver in the
-        # driver's row. The previous draft dropped additional driver-eligible
-        # crew members entirely.
-        primary_driver = next((p for p in people if getattr(p, "is_driver", False)), None)
-        # Only use a non-driver as the Driver-seat exception when the shift is
-        # otherwise full. If a crew seat is still open, keep Driver blank and
-        # put the EMT in C2/C3/C4 instead.
-        driver_exception = primary_driver is None and len(people) >= crew_cap(d, shift)
-        if driver_exception:
-            primary_driver = people[0]
-        ordered = [primary_driver] + [p for p in people if p is not primary_driver]
+        cap = crew_cap(d, shift)
+
+        # EVDT is the preferred Driver seat. If there is no EVDT and the shift
+        # still has an open crew seat, keep Driver open for a later EVDT pickup
+        # and place any AUTH member into C2/C3/C4 instead. Once the shift is
+        # otherwise full, an AUTH member may move into Driver so the crew fits.
+        evdt_driver = next((p for p in people if getattr(p, "is_evdt", False)), None)
+        auth_driver = next(
+            (p for p in people if getattr(p, "is_driver", False) and not getattr(p, "is_evdt", False)),
+            None,
+        )
+        shift_full = len(people) >= cap
+
+        primary_driver = evdt_driver
+        driver_exception = False
+        if primary_driver is None and shift_full:
+            if auth_driver is not None:
+                primary_driver = auth_driver
+            elif people:
+                # Final fallback: only use a crew-only EMT in Driver when the
+                # shift is otherwise full and there is no driver-qualified EMT.
+                primary_driver = people[0]
+                driver_exception = True
+
+        crew_people = [p for p in people if p is not primary_driver]
+        # When Driver is intentionally left open, put AUTH-qualified members at
+        # the front of the crew rows. This yields AUTH in C2 and moves existing
+        # crew to C3/C4, preserving the EVDT opening.
+        if primary_driver is None:
+            crew_people = sorted(
+                crew_people,
+                key=lambda p: (
+                    0 if getattr(p, "is_driver", False) else 1,
+                    p.full_name,
+                ),
+            )
+
         seats = []
         if primary_driver is not None:
             if driver_exception:
@@ -463,9 +489,10 @@ def _ambulance_master_rows(assignments, block_start, block, daynum_start, vehicl
                 seats.append(("Driver", driver_kind, driver_kind, primary_driver))
         else:
             seats.append(("Driver", "EVDT", "EVDT", None))
-        for i, person in enumerate([p for p in ordered if p is not primary_driver], start=2):
+
+        for i, person in enumerate(crew_people, start=2):
             seats.append((f"C{i}", "CREW", f"C{i}", person))
-        while len(seats) < crew_cap(d, shift):
+        while len(seats) < cap:
             number = len(seats) + 1
             seats.append((f"C{number}", "CREW", f"C{number}", None))
         for seat, requires, suffix, person in seats:
