@@ -5,6 +5,7 @@ from datetime import date
 from pathlib import Path
 
 from campus_solver import solve_campus
+from ambulance_solver import solve_ambulance
 from models import BertMember, Volunteer
 from output import export_master_schedule_csv
 from parse_form import _build_column_maps
@@ -36,6 +37,31 @@ class MasterScheduleExportTests(unittest.TestCase):
         self.assertEqual([row[7] for row in rows[1:4]], ["Driver One", "Driver Two", "Crew One"])
         self.assertEqual(rows[4][5:8], ["S1", "AUTH", "Driver Two"])
 
+    def test_authorized_driver_is_not_exported_as_evdt(self):
+        start = date(2026, 8, 10)
+        authorized = Volunteer("Authorized", "Only", "auth@example.com", "Auth")
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "schedule.csv"
+            export_master_schedule_csv(
+                {(start, "AM"): [authorized]}, {}, start, str(path),
+            )
+            with path.open(newline="") as csv_file:
+                rows = list(csv.reader(csv_file))
+        self.assertEqual(rows[1][1], "F26B1-0810-AM-R1-AUTH")
+        self.assertEqual(rows[1][5:7], ["Driver", "AUTH"])
+
+    def test_open_seats_are_exported_as_blank_rows(self):
+        start = date(2026, 8, 10)
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "schedule.csv"
+            export_master_schedule_csv(
+                {(start, "AM"): []}, {(start, "A"): []}, start, str(path),
+            )
+            with path.open(newline="") as csv_file:
+                rows = list(csv.reader(csv_file))
+        self.assertEqual([row[5] for row in rows[1:]], ["Driver", "C2", "S1", "S2"])
+        self.assertTrue(all(row[7] == "" for row in rows[1:]))
+
 
 class CampusDriverConstraintTests(unittest.TestCase):
     def test_block_with_no_driver_eligible_person_is_still_covered(self):
@@ -58,6 +84,18 @@ class CampusDriverConstraintTests(unittest.TestCase):
         assignments = solve_campus([driver], [bert], [d], time_limit_s=5)
         self.assertTrue(assignments[(d, "A")])
         self.assertTrue(assignments[(d, "A")][0].is_driver)
+
+
+class LockedAssignmentTests(unittest.TestCase):
+    def test_requested_assignment_is_preserved(self):
+        d = date(2026, 8, 10)
+        volunteer = Volunteer("Chosen", "Person", "chosen@example.com", "EMT", available={(d, "AM")})
+        assignments = solve_ambulance(
+            [volunteer], [d], set(), locked_assignments=[
+                {"date": "2026-08-10", "shift": "AM", "email": "chosen@example.com"}
+            ], time_limit_s=5,
+        )
+        self.assertEqual(assignments[(d, "AM")], [volunteer])
 
 
 class ParserCompatibilityTests(unittest.TestCase):
