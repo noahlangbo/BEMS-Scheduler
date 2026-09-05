@@ -299,6 +299,7 @@ def load_all_responses(
     csv_path: str,
     block_start: date,
     block_end: date,
+    driver_status_overrides: Optional[dict[str, str]] = None,
 ) -> tuple[list[Volunteer], list[BertMember]]:
     with open(csv_path, newline="", encoding="utf-8-sig") as f:
         rows = list(csv.reader(f))
@@ -322,6 +323,9 @@ def load_all_responses(
         if bucket is not None and (email not in bucket or ts > bucket[email][0]):
             bucket[email] = (ts, row)
 
+    driver_status_overrides = {
+        email.lower(): status for email, status in (driver_status_overrides or {}).items()
+    }
     volunteers: list[Volunteer] = []
     for email, (_, row) in latest_emt.items():
         blackout_slots, blackout_dates = parse_blackouts(_safe(row, maps["idx_emt_diff"]), year)
@@ -331,7 +335,9 @@ def load_all_responses(
             first_name=_safe(row, maps["idx_emt_first"]),
             last_name=_safe(row, maps["idx_emt_last"]),
             email=email,
-            certification=normalise_driver(_safe(row, maps["idx_driver"])),
+            certification=driver_status_overrides.get(
+                email, normalise_driver(_safe(row, maps["idx_driver"]))
+            ),
             available=available,
             blackout_slots=blackout_slots,
             blackout_dates=blackout_dates,
