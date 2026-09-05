@@ -85,6 +85,8 @@ they need a human conversation, not a better algorithm.
 | `hours.campus_emt` / `hours.campus_bert` | Required (= max) campus hours per role. |
 | `campus_responders_per_block` | Staffing target per campus block. |
 | `campus_driver_policy` | `prefer` (default) fills S1 with an available non-driver when necessary and flags it; use `require` only to leave such blocks open. |
+| `driver_status_overrides_file` | Local, Git-ignored JSON file of roster-based corrections keyed by email. It overrides self-reported credentials without publishing personnel data. |
+| `locked_ambulance_assignments_file` | Local, Git-ignored JSON array of chosen ambulance assignments: `{"date":"2026-09-08","shift":"AM","email":"person@brown.edu"}`. |
 | `solver_time_limit_s` | Solver budget per stage (30s is plenty; raise for huge blocks). |
 | `availability_requirements` | Minimum shifts/blocks people must *submit* (drives the Strike List). |
 | `als_shifts` | `"YYYY-MM-DD:DAY"` / `"YYYY-MM-DD:NIGHT"` entries; weekday `DAY` covers AM+PM. |
