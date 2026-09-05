@@ -62,6 +62,35 @@ class MasterScheduleExportTests(unittest.TestCase):
         self.assertEqual([row[5] for row in rows[1:]], ["Driver", "C2", "S1", "S2"])
         self.assertTrue(all(row[7] == "" for row in rows[1:]))
 
+    def test_saturday_night_preserves_evdt_opening_when_auth_can_ride_crew(self):
+        block_start = date(2026, 9, 8)
+        shift_date = date(2026, 9, 12)
+        auth = Volunteer("Timothy", "Ro", "timothy@example.com", "Auth")
+        crew_one = Volunteer("Samuel", "Salter", "samuel@example.com", "EMT")
+        crew_two = Volunteer("Roma", "Shah", "roma@example.com", "EMT")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "schedule.csv"
+            export_master_schedule_csv(
+                {(shift_date, "NIGHT"): [auth, crew_one, crew_two]},
+                {},
+                block_start,
+                str(path),
+                block="F26B1",
+                daynum_start=908,
+            )
+            with path.open(newline="") as csv_file:
+                rows = list(csv.reader(csv_file))
+
+        ambulance_rows = rows[1:5]
+        self.assertEqual(ambulance_rows[0][1], "F26B1-0912-NIGHT-R1-EVDT")
+        self.assertEqual(ambulance_rows[0][5:8], ["Driver", "EVDT", ""])
+        self.assertEqual(ambulance_rows[1][5:8], ["C2", "CREW", "Timothy Ro"])
+        self.assertEqual(
+            {row[7] for row in ambulance_rows[1:]},
+            {"Timothy Ro", "Samuel Salter", "Roma Shah"},
+        )
+
 
 class CampusDriverConstraintTests(unittest.TestCase):
     def test_block_with_no_driver_eligible_person_is_still_covered(self):
