@@ -36,7 +36,10 @@ def main() -> None:
     hours = cfg.get("hours", {})
     required = int(hours.get("ambulance_emt", 12))
 
-    volunteers, bert_members = load_all_responses(cfg["form_csv"], block_start, block_end)
+    volunteers, bert_members = load_all_responses(
+        cfg["form_csv"], block_start, block_end,
+        driver_status_overrides=cfg.get("driver_status_overrides"),
+    )
     assignments = solve_ambulance(volunteers, schedule_dates, als_shifts,
                                   required_hours=required)
     campus = solve_campus(volunteers, bert_members, schedule_dates,
