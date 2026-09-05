@@ -100,7 +100,10 @@ def main() -> None:
     print(f"\n▶  Parsing form responses from '{form_csv}'...")
     if not Path(form_csv).exists():
         sys.exit(f"ERROR: form CSV not found at '{form_csv}'.")
-    volunteers, bert_members = load_all_responses(form_csv, block_start, block_end)
+    volunteers, bert_members = load_all_responses(
+        form_csv, block_start, block_end,
+        driver_status_overrides=cfg.get("driver_status_overrides"),
+    )
     if not volunteers:
         sys.exit("ERROR: no Ambulance EMT volunteers found.")
 
