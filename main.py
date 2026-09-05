@@ -66,6 +66,31 @@ def parse_blackout_periods(cfg: dict) -> set:
     return slots
 
 
+def load_driver_status_overrides(cfg: dict) -> dict[str, str]:
+    """Load local roster corrections without committing personnel data."""
+    overrides = dict(cfg.get("driver_status_overrides") or {})
+    path = cfg.get("driver_status_overrides_file")
+    if not path or not Path(path).exists():
+        return overrides
+    with open(path, encoding="utf-8") as f:
+        local = json.load(f)
+    if not isinstance(local, dict):
+        raise ValueError(f"driver status overrides in '{path}' must be a JSON object")
+    overrides.update(local)
+    return overrides
+
+
+def load_locked_ambulance_assignments(cfg: dict) -> list[dict]:
+    path = cfg.get("locked_ambulance_assignments_file")
+    if not path or not Path(path).exists():
+        return []
+    with open(path, encoding="utf-8") as f:
+        locks = json.load(f)
+    if not isinstance(locks, list):
+        raise ValueError(f"locked assignments in '{path}' must be a JSON array")
+    return locks
+
+
 def main() -> None:
     config_path = sys.argv[1] if len(sys.argv) > 1 else "config.json"
     print("\n▶  Loading configuration...")
@@ -100,9 +125,14 @@ def main() -> None:
     print(f"\n▶  Parsing form responses from '{form_csv}'...")
     if not Path(form_csv).exists():
         sys.exit(f"ERROR: form CSV not found at '{form_csv}'.")
+    try:
+        driver_status_overrides = load_driver_status_overrides(cfg)
+        locked_ambulance_assignments = load_locked_ambulance_assignments(cfg)
+    except (OSError, ValueError, json.JSONDecodeError) as e:
+        sys.exit(f"ERROR: invalid driver status overrides: {e}")
     volunteers, bert_members = load_all_responses(
         form_csv, block_start, block_end,
-        driver_status_overrides=cfg.get("driver_status_overrides"),
+        driver_status_overrides=driver_status_overrides,
     )
     if not volunteers:
         sys.exit("ERROR: no Ambulance EMT volunteers found.")
@@ -122,6 +152,7 @@ def main() -> None:
     print("▶  Solving ambulance schedule (CP-SAT)...")
     assignments = solve_ambulance(
         volunteers, schedule_dates, als_shifts, blackout_slots,
+        locked_assignments=locked_ambulance_assignments,
         required_hours=ambulance_required, time_limit_s=time_limit_s,
     )
 
