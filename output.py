@@ -26,6 +26,7 @@ from models import (
     SHIFT_TIMES,
     ShiftKey,
     Volunteer,
+    crew_cap,
     is_big_weekend,
 )
 
@@ -441,24 +442,27 @@ def _day_number(d: date, block_start: date, daynum_start: int) -> str:
 def _ambulance_master_rows(assignments, block_start, block, daynum_start, vehicle):
     rows = []
     for (d, shift), people in sorted(assignments.items()):
-        if not people:
-            continue
         daynum = _day_number(d, block_start, daynum_start)
         # Preserve every assignment while putting the preferred driver in the
         # driver's row.  The previous draft dropped additional driver-eligible
         # crew members entirely.
         primary_driver = next((p for p in people if getattr(p, "is_driver", False)), None)
         ordered = ([primary_driver] if primary_driver else []) + [p for p in people if p is not primary_driver]
-        for i, person in enumerate(ordered):
-            if i == 0 and primary_driver is not None:
-                driver_kind = "EVDT" if primary_driver.is_evdt else "AUTH"
-                seat, requires, suffix = "Driver", driver_kind, driver_kind
-            else:
-                crew_number = i + 1 if primary_driver is not None else i + 2
-                seat, requires, suffix = f"C{crew_number}", "CREW", f"C{crew_number}"
+        seats = []
+        if primary_driver is not None:
+            driver_kind = "EVDT" if primary_driver.is_evdt else "AUTH"
+            seats.append(("Driver", driver_kind, driver_kind, primary_driver))
+        else:
+            seats.append(("Driver", "EVDT", "EVDT", None))
+        for i, person in enumerate([p for p in ordered if p is not primary_driver], start=2):
+            seats.append((f"C{i}", "CREW", f"C{i}", person))
+        while len(seats) < crew_cap(d, shift):
+            number = len(seats) + 1
+            seats.append((f"C{number}", "CREW", f"C{number}", None))
+        for seat, requires, suffix, person in seats:
             shift_id = f"{block}-{daynum}-{shift}-{vehicle}-{suffix}"
             rows.append([block, shift_id, _date_for_master_schedule(d), shift,
-                         vehicle, seat, requires, person.full_name])
+                         vehicle, seat, requires, person.full_name if person else ""])
     return rows
 
 
@@ -467,11 +471,12 @@ def _campus_master_rows(campus_assignments, block_start, block, daynum_start):
     for (d, campus_block), people in sorted(campus_assignments.items()):
         daynum = _day_number(d, block_start, daynum_start)
         ordered = sorted(people, key=lambda p: (not getattr(p, "is_driver", False), p.full_name))
-        for i, person in enumerate(ordered, start=1):
+        for i in range(1, 3):
+            person = ordered[i - 1] if i <= len(ordered) else None
             seat = f"S{i}"
             shift_id = f"{block}-{daynum}-{campus_block}-CR-{seat}"
             rows.append([block, shift_id, _date_for_master_schedule(d), campus_block,
-                         "CR", seat, "AUTH" if seat == "S1" else "CREW", person.full_name])
+                         "CR", seat, "AUTH" if seat == "S1" else "CREW", person.full_name if person else ""])
     return rows
 
 
