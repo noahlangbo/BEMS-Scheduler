@@ -447,11 +447,19 @@ def _ambulance_master_rows(assignments, block_start, block, daynum_start, vehicl
         # driver's row.  The previous draft dropped additional driver-eligible
         # crew members entirely.
         primary_driver = next((p for p in people if getattr(p, "is_driver", False)), None)
-        ordered = ([primary_driver] if primary_driver else []) + [p for p in people if p is not primary_driver]
+        # Keep exported seats within the solver cap when a driver exception is
+        # allowed: put the first responder in Driver and retain the exception.
+        driver_exception = primary_driver is None and bool(people)
+        if driver_exception:
+            primary_driver = people[0]
+        ordered = [primary_driver] + [p for p in people if p is not primary_driver]
         seats = []
         if primary_driver is not None:
-            driver_kind = "EVDT" if primary_driver.is_evdt else "AUTH"
-            seats.append(("Driver", driver_kind, driver_kind, primary_driver))
+            if driver_exception:
+                seats.append(("Driver", "CREW", "DRVX", primary_driver))
+            else:
+                driver_kind = "EVDT" if primary_driver.is_evdt else "AUTH"
+                seats.append(("Driver", driver_kind, driver_kind, primary_driver))
         else:
             seats.append(("Driver", "EVDT", "EVDT", None))
         for i, person in enumerate([p for p in ordered if p is not primary_driver], start=2):
