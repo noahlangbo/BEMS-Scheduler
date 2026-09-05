@@ -55,14 +55,16 @@ whole block at once instead of filling shifts greedily one at a time.
 - Hour requirement is also a hard maximum — nobody is scheduled above it.
 - Rest: max 12h continuous (AM+PM is allowed), then at least 12h off — a
   NIGHT excludes all daytime shifts that day and the next; NIGHT→NIGHT is fine.
-- ALS shifts always hold one seat only an EVDT can fill (left open otherwise).
+- Ambulance seats are Driver, C2, C3, and C4. EVDT and Authorized members are
+  placed in Driver whenever possible. Crew fills C2 and later seats first;
+  using Driver for crew is an explicit, visible exception.
 - Campus blocks never overlap the same person's ambulance shifts.
 
 **Priorities (highest first):**
 
 1. Every shift has at least one person.
 2. Everyone reaches their required hours.
-3. An EVDT on every ALS shift; a driver on every night/weekend shift.
+3. An EVDT in every ambulance driver seat; a driver on every night/weekend shift.
 4. Maximize total filled crew slots — with hours capped, this automatically
    prefers giving people 6h shifts over 12h shifts, spreading coverage.
 5. Spread people out (avoid same-day/back-to-back days) and equalize any

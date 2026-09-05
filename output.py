@@ -26,6 +26,7 @@ from models import (
     SHIFT_TIMES,
     ShiftKey,
     Volunteer,
+    crew_cap,
     is_big_weekend,
 )
 
@@ -250,9 +251,10 @@ def collect_warnings(
         if not people:
             issues.append(("UNFILLED SHIFT", d, s, "No volunteers assigned"))
             continue
-        if key in als_shifts and not any(v.is_evdt for v in people):
-            issues.append(("ALS — NO EVDT", d, s,
-                           f"Assigned: {', '.join(v.full_name for v in people)}"))
+        if not any(v.is_evdt for v in people):
+            warning = "ALS: NO EVDT" if key in als_shifts else "OPEN EVDT"
+            issues.append((warning, d, s,
+                           f"Assigned crew: {', '.join(v.full_name for v in people)}"))
         needs_driver = s == "NIGHT" or is_big_weekend(d, s)
         if needs_driver and not any(v.is_driver for v in people):
             issues.append(("NO DRIVER", d, s, "No EVDT or Auth on crew"))
@@ -368,9 +370,7 @@ def print_summary(
     total = len(assignments)
     unfilled = sum(1 for p in assignments.values() if not p)
     filled_slots = sum(len(p) for p in assignments.values())
-    als_no_evdt = sum(
-        1 for k, p in assignments.items() if k in als_shifts and not any(v.is_evdt for v in p)
-    )
+    open_evdt = sum(1 for p in assignments.values() if not any(v.is_evdt for v in p))
     no_driver = sum(
         1 for (d, s), p in assignments.items()
         if (s == "NIGHT" or is_big_weekend(d, s)) and not any(v.is_driver for v in p)
@@ -389,7 +389,7 @@ def print_summary(
     print(f"  Ambulance shifts:            {total}")
     print(f"    Unfilled:                  {unfilled}" + (" ⚠" if unfilled else " ✓"))
     print(f"    Filled crew slots:         {filled_slots}")
-    print(f"    ALS without EVDT:          {als_no_evdt}" + (" ⚠" if als_no_evdt else " ✓"))
+    print(f"    Open EVDT seats:           {open_evdt}" + (" ⚠" if open_evdt else " ✓"))
     print(f"    Night/weekend w/o driver:  {no_driver}" + (" ⚠" if no_driver else " ✓"))
     print(f"    EMTs under {ambulance_required}h:             {under}" + (" ⚠" if under else " ✓"))
     print(f"  Campus blocks:               {c_total}")
@@ -432,23 +432,38 @@ def _day_number(d: date, block_start: date, daynum_start: int) -> str:
 def _ambulance_master_rows(assignments, block_start, block, daynum_start, vehicle):
     rows = []
     for (d, shift), people in sorted(assignments.items()):
-        if not people:
-            continue
         daynum = _day_number(d, block_start, daynum_start)
-        # Preserve every assignment while putting the preferred driver in the
-        # driver's row.  The previous draft dropped additional driver-eligible
-        # crew members entirely.
-        primary_driver = next((p for p in people if getattr(p, "is_driver", False)), None)
-        ordered = ([primary_driver] if primary_driver else []) + [p for p in people if p is not primary_driver]
-        for i, person in enumerate(ordered):
-            if i == 0 and primary_driver is not None:
-                seat, requires, suffix = "Driver", "EVDT", "EVDT"
-            else:
-                crew_number = i + 1 if primary_driver is not None else i + 2
-                seat, requires, suffix = f"C{crew_number}", "CREW", f"C{crew_number}"
+        cap = crew_cap(d, shift)
+        primary_evdt = next((p for p in people if getattr(p, "is_evdt", False)), None)
+        primary_auth = (
+            None if primary_evdt is not None else next(
+                (p for p in people if getattr(p, "is_driver", False)), None
+            )
+        )
+        crew = [p for p in people if p is not primary_evdt and p is not primary_auth]
+
+        # The normal ambulance crew seats are C2, C3, and C4. Place generic
+        # crew there first. Only use the driver seat as an explicit override
+        # when every normal crew seat is already occupied.
+        crew_slots = cap - 1
+        driver_person = primary_evdt or primary_auth
+        driver_requirement = "EVDT" if primary_evdt else "AUTH" if primary_auth else "EVDT"
+        driver_suffix = "EVDT" if primary_evdt else "AUTH" if primary_auth else "EVDT"
+        if driver_person is None and len(crew) > crew_slots:
+            driver_person = crew.pop()
+            driver_suffix = "DRVX"
+
+        driver_id = f"{block}-{daynum}-{shift}-{vehicle}-{driver_suffix}"
+        rows.append([block, driver_id, _date_for_master_schedule(d), shift,
+                     vehicle, "Driver", driver_requirement,
+                     driver_person.full_name if driver_person else ""])
+
+        for crew_number in range(2, cap + 1):
+            person = crew[crew_number - 2] if crew_number - 1 <= len(crew) else None
+            suffix = f"C{crew_number}"
             shift_id = f"{block}-{daynum}-{shift}-{vehicle}-{suffix}"
             rows.append([block, shift_id, _date_for_master_schedule(d), shift,
-                         vehicle, seat, requires, person.full_name])
+                         vehicle, suffix, "CREW", person.full_name if person else ""])
     return rows
 
 
@@ -456,12 +471,35 @@ def _campus_master_rows(campus_assignments, block_start, block, daynum_start):
     rows = []
     for (d, campus_block), people in sorted(campus_assignments.items()):
         daynum = _day_number(d, block_start, daynum_start)
-        ordered = sorted(people, key=lambda p: (not getattr(p, "is_driver", False), p.full_name))
-        for i, person in enumerate(ordered, start=1):
-            seat = f"S{i}"
-            shift_id = f"{block}-{daynum}-{campus_block}-CR-{seat}"
-            rows.append([block, shift_id, _date_for_master_schedule(d), campus_block,
-                         "CR", seat, "AUTH" if seat == "S1" else "CREW", person.full_name])
+        primary_driver = next(
+            (p for p in people if getattr(p, "is_driver", False)), None
+        )
+        crew = [p for p in people if p is not primary_driver]
+        if primary_driver is None and len(crew) > 1:
+            primary_driver = crew.pop()
+
+        # S1 is for an EVDT or Authorized responder. Generic crew goes to S2
+        # first, with a clearly visible override only when S2 is already full.
+        rows.append([
+            block,
+            f"{block}-{daynum}-{campus_block}-CR-S1",
+            _date_for_master_schedule(d),
+            campus_block,
+            "CR",
+            "S1",
+            "AUTH",
+            primary_driver.full_name if primary_driver else "",
+        ])
+        rows.append([
+            block,
+            f"{block}-{daynum}-{campus_block}-CR-S2",
+            _date_for_master_schedule(d),
+            campus_block,
+            "CR",
+            "S2",
+            "CREW",
+            crew[0].full_name if crew else "",
+        ])
     return rows
 
 

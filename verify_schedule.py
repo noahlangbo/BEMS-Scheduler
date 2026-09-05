@@ -46,7 +46,7 @@ def main() -> None:
 
     errors: list[str] = []
 
-    # Availability + crew caps + ALS reservation
+    # Availability + crew caps
     for key, people in assignments.items():
         cap = crew_cap(*key)
         if len(people) > cap:
@@ -54,9 +54,6 @@ def main() -> None:
         for v in people:
             if key not in v.available:
                 errors.append(f"{key}: {v.full_name} not available but assigned")
-        if key in als_shifts and not any(v.is_evdt for v in people):
-            if len(people) > cap - 1:
-                errors.append(f"{key}: ALS with no EVDT but reserved slot filled")
 
     # Hours cap + rest rules, from the shift side
     for v in volunteers:

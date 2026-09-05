@@ -14,14 +14,15 @@ Hard constraints
   - Crew caps per shift (see models.crew_cap).
   - Nobody exceeds their required hours ("the requirement is also the max").
   - Rest rules: max 12h continuous work, then >=12h off (models.rest_conflict).
-  - ALS shifts always keep one slot that only an EVDT can occupy: if no EVDT
-    is on the shift, at most cap-1 people may be assigned.
+  - The exporter places EVDT and Authorized members in the appropriate seat
+    whenever possible. A driver exception may still be scheduled when needed
+    for coverage or hours, and is flagged for Personnel review.
 
 Objective (highest priority first — weights are separated by magnitude)
 ----------------------------------------------------------------------
   1. Cover every shift with at least one person.
   2. Get every volunteer to their required hours (minimize shortfall).
-  3. Put an EVDT on every ALS shift.
+  3. Put an EVDT in the driver slot whenever possible.
   4. Put a driver (EVDT/Auth) on every night & weekend shift.
   5. Fill as many crew slots as possible — with hours fixed, this favors
      splitting people into 6h shifts over 12h shifts, maximizing coverage.
@@ -48,7 +49,7 @@ from models import (
 # Objective weights, separated by orders of magnitude so higher tiers always win.
 W_COVER = 1_000_000        # per shift with >= 1 person
 W_SHORTFALL = -30_000      # per hour a volunteer falls short of required hours
-W_EVDT_ON_ALS = 150_000    # per ALS shift with an EVDT
+W_EVDT_DRIVER = 150_000    # per ambulance shift with an EVDT
 W_DRIVER = 40_000          # per night/weekend shift with any driver
 W_SLOT = 500               # per filled crew slot
 W_SAME_DAY = -200          # per same-person AM+PM pair on one day
@@ -103,12 +104,6 @@ def solve_ambulance(
             continue
         cap = crew_cap(*key)
         model.add(sum(assigned) <= cap)
-        if key in als_shifts:
-            # Reserve one slot for an EVDT: non-EVDTs can never take the last seat.
-            non_evdt = vars_for_shift(key, lambda v: not v.is_evdt)
-            if non_evdt:
-                model.add(sum(non_evdt) <= cap - 1)
-
     for v in volunteers:
         pairs = vars_for_volunteer(v)
         if not pairs:
@@ -130,12 +125,11 @@ def solve_ambulance(
         model.add(sum(assigned) >= 1).only_enforce_if(covered)
         terms.append(W_COVER * covered)
 
-        if key in als_shifts:
-            evdts = vars_for_shift(key, lambda v: v.is_evdt)
-            if evdts:
-                has_evdt = model.new_bool_var(f"evdt_{key[0]}_{key[1]}")
-                model.add(sum(evdts) >= 1).only_enforce_if(has_evdt)
-                terms.append(W_EVDT_ON_ALS * has_evdt)
+        evdts = vars_for_shift(key, lambda v: v.is_evdt)
+        if evdts:
+            has_evdt = model.new_bool_var(f"evdt_{key[0]}_{key[1]}")
+            model.add(sum(evdts) >= 1).only_enforce_if(has_evdt)
+            terms.append(W_EVDT_DRIVER * has_evdt)
 
         if _needs_driver(key):
             drivers = vars_for_shift(key, lambda v: v.is_driver)
