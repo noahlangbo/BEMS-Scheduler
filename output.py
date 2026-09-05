@@ -451,7 +451,8 @@ def _ambulance_master_rows(assignments, block_start, block, daynum_start, vehicl
         ordered = ([primary_driver] if primary_driver else []) + [p for p in people if p is not primary_driver]
         for i, person in enumerate(ordered):
             if i == 0 and primary_driver is not None:
-                seat, requires, suffix = "Driver", "EVDT", "EVDT"
+                driver_kind = "EVDT" if primary_driver.is_evdt else "AUTH"
+                seat, requires, suffix = "Driver", driver_kind, driver_kind
             else:
                 crew_number = i + 1 if primary_driver is not None else i + 2
                 seat, requires, suffix = f"C{crew_number}", "CREW", f"C{crew_number}"
