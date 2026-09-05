@@ -20,6 +20,8 @@
 
   "campus_responders_per_block": 2,
   "campus_driver_policy": "prefer",
+  "driver_status_overrides_file": "driver_status_overrides.local.json",
+  "locked_ambulance_assignments_file": "locked_ambulance_assignments.local.json",
   "solver_time_limit_s": 30,
 
   "availability_requirements": {
