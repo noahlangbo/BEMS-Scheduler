@@ -17,15 +17,33 @@ def emt(name="Person", cert="EMT", ambulance=(), campus=()):
 
 
 class SchedulingTests(unittest.TestCase):
-    def solve(self, people, providers=None, campus=None, caps=HourCaps(), locks=()):
+    def solve(self, people, providers=None, campus=None, caps=HourCaps(), locks=(), wellness=(), wellness_capacity=1):
         if providers is None:
             providers = {k: "BLS" for p in people for k in getattr(p, "available", ())}
         if campus is None:
             campus = sorted({k for p in people for k in p.campus_available})
-        result = solve_schedule(people, providers, campus, caps, 2, list(locks), 5, 1)
-        self.assertEqual(validate_schedule(result, people, providers, campus, caps, 2, locks), [])
+        result = solve_schedule(people, providers, campus, caps, 2, list(locks), 5, 1,
+                                list(wellness), wellness_capacity)
+        self.assertEqual(validate_schedule(result, people, providers, campus, caps, 2, locks,
+                                           wellness, wellness_capacity), [])
         self.assertTrue(all(s.status == "OPTIMAL" for s in result.stages))
         return result
+
+    def test_wellness_is_lower_priority_than_ambulance_hours(self):
+        ambulance, wellness = (D, 'AM'), (D, 'WAM')
+        p = emt(ambulance={ambulance})
+        p.wellness_available = {wellness}
+        result = self.solve([p], {ambulance: 'BLS'}, caps=HourCaps(6, 0, 9), wellness={wellness})
+        self.assertEqual(p.assigned, [ambulance])
+        self.assertEqual(result.wellness[wellness], [])
+
+    def test_wellness_is_limited_to_one_shift_per_week(self):
+        first, second = (D, 'WAM'), (D + timedelta(days=1), 'WPM')
+        p = emt()
+        p.wellness_available = {first, second}
+        result = self.solve([p], providers={}, campus=[], wellness={first, second})
+        self.assertEqual(sum(bool(result.wellness[key]) for key in (first, second)), 1)
+        self.assertEqual(len(p.wellness_assigned), 1)
 
     def test_approved_contiguous_combinations(self):
         for ambulance, campus in [(('AM', 'PM'), ()), (('AM',), ('C',)),
