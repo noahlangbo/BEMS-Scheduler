@@ -178,7 +178,7 @@ class SchedulingTests(unittest.TestCase):
         self.assertEqual(flexible.assigned, [saturday])
         self.assertEqual([len(result.ambulance[k]) for k in (friday, saturday)], [3, 3])
 
-    def test_fourth_night_volunteer_outranks_completing_weekend_day_split_crew(self):
+    def test_weekend_day_crew_baseline_outranks_a_fourth_night_volunteer(self):
         for offset in (4, 5):
             with self.subTest(night_offset=offset):
                 night, day = (D + timedelta(days=offset), 'NIGHT'), (D + timedelta(days=6), 'DAY')
@@ -187,8 +187,8 @@ class SchedulingTests(unittest.TestCase):
                           emt('Night2', ambulance={night}), emt('DayAuth', 'Auth', {day}),
                           emt('DayEMT', ambulance={day})]
                 result = self.solve(people, {night: 'BLS', day: 'BLS'}, caps=HourCaps(12, 0, 9))
-                self.assertEqual(flexible.assigned, [night])
-                self.assertEqual([len(result.ambulance[k]) for k in (night, day)], [4, 2])
+                self.assertEqual(flexible.assigned, [day])
+                self.assertEqual([len(result.ambulance[k]) for k in (night, day)], [3, 3])
 
     def test_bls_night_split_crew_outranks_weekend_day_als_driver(self):
         night, day = (D + timedelta(days=4), 'NIGHT'), (D + timedelta(days=5), 'DAY')
