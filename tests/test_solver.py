@@ -234,25 +234,26 @@ class SchedulingTests(unittest.TestCase):
                 self.assertEqual(driver.assigned, [weekend if existing_crew < 3 else weekday])
                 self.assertEqual(len(result.ambulance[weekend]), min(existing_crew + 1, 3))
 
-    def test_three_weekend_emts_without_a_driver_still_need_the_evdt(self):
+    def test_weekend_three_person_crew_does_not_require_a_utility_driver(self):
         weekday, weekend = (D, 'NIGHT'), (D + timedelta(days=4), 'NIGHT')
         driver = emt('Driver', 'EVDT', {weekday, weekend})
         people = [driver, emt('Weekday', ambulance={weekday})]
         people.extend(emt(f'Crew{i}', ambulance={weekend}) for i in range(3))
         result = self.solve(people, {weekday: 'ALS', weekend: 'BLS'}, caps=HourCaps(12, 0, 9))
-        self.assertEqual(driver.assigned, [weekend])
-        self.assertGreaterEqual(len(result.ambulance[weekend]), 3)
+        self.assertEqual(driver.assigned, [weekday])
+        self.assertEqual(len(result.ambulance[weekend]), 3)
 
-    def test_als_split_crew_needs_two_distinct_qualified_drivers(self):
+    def test_als_weekend_three_person_crew_needs_only_one_evdt(self):
         key = (D + timedelta(days=5), 'DAY')
-        for truck_cert, second_cert, expected_ready in [('EVDT', 'EMT', 0), ('EVDT', 'Auth', 1),
-                                                        ('EVDT', 'EVDT', 1), ('Auth', 'Auth', 0)]:
+        for truck_cert, second_cert, expected_evdt in [('EVDT', 'EMT', 1), ('EVDT', 'Auth', 1),
+                                                       ('EVDT', 'EVDT', 1), ('Auth', 'Auth', 0)]:
             with self.subTest(truck_cert=truck_cert, second_cert=second_cert):
-                people = [emt('Truck', truck_cert, {key}), emt('Utility', second_cert, {key}),
-                          emt('Crew', ambulance={key})]
+                people = [emt('Truck', truck_cert, {key}), emt('Crew2', second_cert, {key}),
+                          emt('Crew3', ambulance={key})]
                 result = self.solve(people, {key: 'ALS'}, caps=HourCaps(12, 0, 9))
-                ready = next(s for s in result.stages if s.name == 'Saturday days: shifts ready for split crew')
-                self.assertEqual(ready.value, expected_ready)
+                evdt = next((s for s in result.stages
+                             if s.name == 'Saturday days: ALS shifts with EVDT'), None)
+                self.assertEqual(evdt.value if evdt else 0, expected_evdt)
                 self.assertEqual(len(result.ambulance[key]), 3)
 
     def test_three_person_split_crews_outrank_a_fourth_weekend_volunteer(self):
@@ -290,8 +291,11 @@ class SchedulingTests(unittest.TestCase):
                     providers = {k: 'BLS' for k in weekdays}
                     providers[weekend] = provider
                     result = self.solve(people, providers, caps=HourCaps(12, 0, 9))
-                    self.assertEqual(flexible.assigned, [weekend])
-                    self.assertEqual(len(result.ambulance[weekend]), 4)
+                    self.assertEqual(len(result.ambulance[weekend]), 4 if provider == 'ALS' else 3)
+                    if provider == 'ALS':
+                        self.assertEqual(flexible.assigned, [weekend])
+                    else:
+                        self.assertNotIn(weekend, flexible.assigned)
                     self.assertTrue(all(len(result.ambulance[k]) == 1 for k in weekdays))
 
     def test_weekend_staffing_outranks_total_hours_without_losing_coverage(self):
@@ -331,7 +335,7 @@ class SchedulingTests(unittest.TestCase):
     def test_crew_and_campus_capacity(self):
         people = [emt(str(i), ambulance={(D, 'AM')}, campus={(D, 'C')}) for i in range(6)]
         result = self.solve(people)
-        self.assertEqual(len(result.ambulance[D, 'AM']), 2)
+        self.assertEqual(len(result.ambulance[D, 'AM']), 1)
         self.assertEqual(len(result.campus[D, 'C']), 2)
 
     def test_rerun_does_not_accumulate_assignments(self):
