@@ -239,11 +239,14 @@ def solve_schedule(
     for rank in (2, 3):
         add_weekend_objective(rank, "als", "ALS shifts with EVDT")
     objectives.append(("Other ALS shifts with EVDT", sum(als_other)))
-    for rank in (0, 1):
-        add_weekend_objective(rank, "seats", "volunteer seats filled")
-    # Extra daytime staffing can never displace a higher-priority night crew.
+    # Build Saturday/Sunday crews toward their three-person baseline before
+    # adding fourth volunteers to Friday/Saturday nights. This balances scarce
+    # weekend availability across day and night coverage without displacing a
+    # higher-priority night split crew.
     for rank in (2, 3):
         add_split_crew_objectives(rank)
+    for rank in (0, 1):
+        add_weekend_objective(rank, "seats", "volunteer seats filled")
     for rank in (2, 3):
         add_weekend_objective(rank, "seats", "volunteer seats filled")
     objectives.extend([

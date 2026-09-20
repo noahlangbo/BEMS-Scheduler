@@ -228,9 +228,11 @@ over adding fourth volunteers to other shifts in that category.
 
 Once night split crews are protected, ALS driving takes priority over fourth
 night volunteers. This preserves the rule that an EVDT can cover weekday ALS
-once a BLS night already has three people and a qualified driver. Remaining
-fourth night seats are then filled before building larger weekend day crews.
-Day crews cannot displace higher-priority night staffing.
+once a BLS night already has three people and a qualified driver. The solver
+then builds Saturday/Sunday crews toward three volunteers before adding fourth
+Friday/Saturday-night volunteers. Day crews cannot displace a higher-priority
+night split crew, but an extra night seat cannot take precedence over baseline
+day coverage.
 
 The solver applies these priorities in order, preserving each earlier attained
 result while choosing later assignments:
@@ -239,8 +241,8 @@ result while choosing later assignments:
 2. Friday nights: ALS EVDT coverage, qualified split crews, staffing toward three volunteers, and BLS Utility driving.
 3. Saturday nights: the same goals, after Friday-night results are protected.
 4. Remaining ALS driving: Saturday days, Sunday days, then other ALS shifts.
-5. Extra night volunteers up to the four-person capacity: Friday nights, then Saturday nights.
-6. Weekend day split crews and staffing toward three: Saturday days, then Sunday days. Drivers must qualify for each vehicle.
+5. Weekend day split crews and staffing toward three: Saturday days, then Sunday days. Drivers must qualify for each vehicle.
+6. Extra night volunteers up to the four-person capacity: Friday nights, then Saturday nights.
 7. Extra day volunteers up to capacity: Saturday days, then Sunday days.
 8. Ambulance hours within individual caps.
 9. Campus blocks with at least one responder, then campus hours within individual caps.
