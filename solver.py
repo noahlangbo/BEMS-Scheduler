@@ -88,11 +88,15 @@ def solve_schedule(
     locks: list[LockedAssignment] | None = None,
     time_limit_s: float = 30,
     workers: int = 8,
+    wellness_keys: list[ShiftKey] | None = None,
+    wellness_capacity: int = 1,
 ) -> Schedule:
     if time_limit_s <= 0 or type(workers) is not int or workers < 1:
         raise ValueError("Solver time budget and worker count must be positive")
     if type(campus_capacity) is not int or campus_capacity < 1:
         raise ValueError("campus_capacity must be a positive integer")
+    if type(wellness_capacity) is not int or wellness_capacity < 1:
+        raise ValueError("wellness_capacity must be a positive integer")
     if any(kind not in ("ALS", "BLS") for kind in providers.values()):
         raise ValueError("Every ambulance shift must explicitly specify ALS or BLS")
     people = sorted(people, key=lambda p: p.email)
@@ -100,13 +104,17 @@ def solve_schedule(
         raise ValueError("Every person must have one unique, nonempty email")
 
     model = cp_model.CpModel()
-    x, y = {}, {}
-    amb_by_key, cr_by_key = defaultdict(list), defaultdict(list)
+    x, y, z = {}, {}, {}
+    amb_by_key, cr_by_key, wellness_by_key = defaultdict(list), defaultdict(list), defaultdict(list)
     by_person = defaultdict(list)
     campus_keys = sorted(set(campus_keys))
-    campus_set = set(campus_keys)
+    wellness_keys = sorted(set(wellness_keys or ()))
+    campus_set, wellness_set = set(campus_keys), set(wellness_keys)
     for pi, person in enumerate(people):
-        services = [(y, person.campus_available & campus_set, cr_by_key)]
+        services = [
+            (y, person.campus_available & campus_set, cr_by_key),
+            (z, person.wellness_available & wellness_set, wellness_by_key),
+        ]
         if isinstance(person, Volunteer):
             services.append((x, person.available & providers.keys(), amb_by_key))
         for variables, available, index in services:
@@ -123,6 +131,8 @@ def solve_schedule(
             model.add(sum(v for pi, v in entries if not people[pi].is_evdt) <= crew_cap(*key) - 1)
     for entries in cr_by_key.values():
         model.add(sum(v for _, v in entries) <= campus_capacity)
+    for entries in wellness_by_key.values():
+        model.add(sum(v for _, v in entries) <= wellness_capacity)
 
     # A/B/C/D are occupancy segments, not mandatory assignment bundles.
     patterns = [(0, 0, 0, 0)] + [
@@ -141,6 +151,13 @@ def solve_schedule(
         days = defaultdict(list)
         for key, var in assignments:
             days[key[0]].append((key[1], var))
+        weekly_wellness = defaultdict(list)
+        for key, var in assignments:
+            if (pi, key) in z:
+                monday = key[0] - timedelta(days=key[0].weekday())
+                weekly_wellness[monday].append(var)
+        for entries in weekly_wellness.values():
+            model.add(sum(entries) <= 1)
         for d, entries in days.items():
             occupied = []
             for hour in (7, 10, 13, 16):
@@ -233,15 +250,24 @@ def solve_schedule(
         ("Ambulance hours within caps", sum(amb_hours)),
         ("Campus blocks with a responder", sum(campus_coverage)),
         ("Campus hours within caps", sum(cr_hours)),
+        ("Wellness Wagon shifts filled", sum(v for entries in wellness_by_key.values() for _, v in entries)),
     ])
     values, stages = _optimize(model, objectives, time_limit_s, workers)
-    result = Schedule({k: [] for k in sorted(providers)}, {k: [] for k in campus_keys}, stages)
+    result = Schedule(
+        {k: [] for k in sorted(providers)},
+        {k: [] for k in campus_keys},
+        {k: [] for k in wellness_keys},
+        stages,
+    )
     for person in people:
         person.campus_assigned = []
+        person.wellness_assigned = []
         if isinstance(person, Volunteer):
             person.assigned = []
     for variables, assignments, attribute in (
-        (x, result.ambulance, "assigned"), (y, result.campus, "campus_assigned")
+        (x, result.ambulance, "assigned"),
+        (y, result.campus, "campus_assigned"),
+        (z, result.wellness, "wellness_assigned"),
     ):
         for (pi, key), var in variables.items():
             if values[var.index]:

@@ -27,6 +27,7 @@ from models import (
     HourCaps,
     Schedule,
     SHIFT_TIMES,
+    WELLNESS_SHIFT_TIMES,
     Volunteer,
     crew_cap,
     is_big_weekend,
@@ -195,6 +196,20 @@ def _fmt_keys(keys):
     return "; ".join(f"{d.month}/{d.day} {s}" for d, s in sorted(keys))
 
 
+def _build_wellness_sheet(ws, wellness_assignments):
+    ws.title = "Wellness Wagon"
+    ws.freeze_panes = "C3"
+    sections = [(s, f"{WELLNESS_SHIFT_TIMES[s][0]}-{WELLNESS_SHIFT_TIMES[s][1]}")
+                for s in ("WAM", "WPM")]
+
+    def cell_for(people, slot_idx):
+        if slot_idx == 0 and people:
+            return ("\n".join(p.full_name for p in sorted(people, key=lambda p: p.full_name)), C_EMT_BG)
+        return ("", C_EMT_BG)
+
+    _weekly_grid(ws, wellness_assignments, sections, ["Volunteer"], cell_for)
+
+
 def _build_summary_sheet(ws, people, caps):
     ws.title = "Hour Summary"
     ws.freeze_panes = "A2"
@@ -280,11 +295,23 @@ def export_schedule_xlsx(schedule: Schedule, people, providers, caps: HourCaps,
     return str(output_path)
 
 
+def export_wellness_wagon_xlsx(schedule: Schedule, output_path):
+    """Write the standalone Wellness Wagon schedule for manual monthly-view entry."""
+    output_path = Path(output_path)
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    wb = Workbook()
+    _build_wellness_sheet(wb.active, schedule.wellness)
+    wb.save(output_path)
+    return str(output_path)
+
+
 def print_summary(schedule, people, providers, caps):
     print("\nSchedule summary")
     print(f"  Ambulance shifts with an EMT: {sum(bool(p) for p in schedule.ambulance.values())}/{len(schedule.ambulance)}")
     print(f"  Ambulance volunteer seats: {sum(map(len, schedule.ambulance.values()))}")
     print(f"  Campus blocks with a responder: {sum(bool(p) for p in schedule.campus.values())}/{len(schedule.campus)} (no required minimum)")
+    if schedule.wellness:
+        print(f"  Wellness Wagon shifts filled: {sum(bool(p) for p in schedule.wellness.values())}/{len(schedule.wellness)}")
     for stage in schedule.stages:
         print(f"  {stage.name}: {stage.value}, {stage.status}, bound {stage.bound}, {stage.seconds:.2f}s")
     for kind, d, shift, details in collect_warnings(schedule, providers, people, caps):

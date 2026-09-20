@@ -42,6 +42,7 @@ COL_EMAIL_FALLBACK = "Username"
 COL_TIMESTAMP = "Timestamp"
 COL_DRIVER = "Driver Status"
 COL_DIFFICULTIES = "Do you foresee"   # freeform blackout question (appears once per section)
+COL_WELLNESS_WORKING = "Are you working for the Wellness Wagon?"
 
 ROLE_EMT_MARKERS = ("ambulance emt", "emt only", "dual-role")
 ROLE_BERT_MARKERS = ("bert member", "bert only")
@@ -135,7 +136,7 @@ def _find_nth_header(headers: list[str], exact: str, n: int) -> int:
 # ── Column map ───────────────────────────────────────────────────────────────
 
 def _build_column_maps(headers: list[str], block_start: date, block_end: date) -> dict:
-    emt_day, emt_night, emt_weekend, emt_week, bert = {}, {}, {}, {}, {}
+    emt_day, emt_night, emt_weekend, emt_week, bert, wellness = {}, {}, {}, {}, {}, {}
 
     def find(exact: str) -> int:
         return next((i for i, h in enumerate(headers) if (h or "").strip() == exact), -1)
@@ -157,6 +158,9 @@ def _build_column_maps(headers: list[str], block_start: date, block_end: date) -
         if d is None:
             continue
         low = hh.lower()
+        if "wellness wagon availability" in low:
+            wellness[i] = d
+            continue
         if "wellness wagon" in low:
             continue
         # Legacy form: one grid per shift type.
@@ -191,10 +195,12 @@ def _build_column_maps(headers: list[str], block_start: date, block_end: date) -
         "emt_weekend": emt_weekend,
         "emt_week": emt_week,
         "bert": bert,
+        "wellness": wellness,
         "idx_role": find_contains(COL_ROLE),
         "idx_email": find(COL_EMAIL) if find(COL_EMAIL) >= 0 else find(COL_EMAIL_FALLBACK),
         "idx_ts": max(find_contains(COL_TIMESTAMP), 0),
         "idx_driver": find_contains(COL_DRIVER),
+        "idx_wellness_working": find(COL_WELLNESS_WORKING),
         "idx_emt_first": _find_nth_header(headers, "First Name", 0),
         "idx_emt_last": _find_nth_header(headers, "Last Name", 0),
         "idx_emt_diff": idx_emt_diff,
@@ -298,6 +304,17 @@ def infer_campus_availability(v: Volunteer) -> set:
     return result
 
 
+def _wellness_availability(row: list[str], maps: dict) -> set:
+    """Return weekday Wellness Wagon AM/PM availability for opted-in members."""
+    if _safe(row, maps["idx_wellness_working"]).lower() != "yes":
+        return set()
+    available = set()
+    for idx, d in maps["wellness"].items():
+        for shift in _shift_tokens(_safe(row, idx)):
+            available.add((d, f"W{shift}"))
+    return available
+
+
 # ── Entry point ──────────────────────────────────────────────────────────────
 
 def load_all_responses(
@@ -371,6 +388,7 @@ def load_all_responses(
             blackout_dates=blackout_dates,
         )
         v.campus_available = infer_campus_availability(v)
+        v.wellness_available = _wellness_availability(row, maps)
         volunteers.append(v)
 
     bert_members: list[BertMember] = []
@@ -385,14 +403,16 @@ def load_all_responses(
         for (d, tok) in blackout_slots:
             if tok in CAMPUS_BLOCKS:
                 campus_available.discard((d, tok))
-        bert_members.append(BertMember(
+        bert_member = BertMember(
             first_name=_safe(row, maps["idx_bert_first"]),
             last_name=_safe(row, maps["idx_bert_last"]),
             email=email,
             campus_available=campus_available,
             blackout_slots=blackout_slots,
             blackout_dates=blackout_dates,
-        ))
+        )
+        bert_member.wellness_available = _wellness_availability(row, maps)
+        bert_members.append(bert_member)
 
     print(f"  Loaded {len(volunteers)} Ambulance EMT volunteers from form.")
     print(f"  Loaded {len(bert_members)} BERT members from form.")

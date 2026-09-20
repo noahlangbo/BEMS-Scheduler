@@ -3,7 +3,7 @@
 Creates an ambulance and Campus Response schedule from the CSV exported from a
 Google Form's **Form Responses** sheet. A ZIP containing that CSV also works.
 The schedule includes volunteer assignments; supervisors are supplied separately.
-Wellness Wagon scheduling and availability strikes are handled elsewhere.
+Wellness Wagon can be enabled as a separate, manual-entry workbook. It never changes the Master Schedule CSV or writes to Google Sheets.
 
 **Workflow: export responses → edit `config.json` → run → review the output.**
 The program reads a downloaded file. It does not connect to or update Google Sheets.
@@ -136,6 +136,7 @@ and the paths to the output files.
 | --- | --- |
 | `outputs/schedule.xlsx` | Open in Excel or import into Google Sheets. **Schedule** shows ambulance assignments; **Campus Response** shows campus assignments; **Hour Summary** lists each person's hours and shortfalls; **Warnings** lists staffing/driver/hour issues; **Solver** records how thoroughly each objective was solved. |
 | `outputs/master_schedule.csv` | Volunteer seat rows for the Master Schedule. Review before importing into another system. |
+| `outputs/wellness_wagon.xlsx` | Separate weekday AM/PM Wellness Wagon grid for manual entry into the V3 monthly view. It is not part of the Master Schedule CSV. |
 
 The `outputs` folder is created automatically. Rerunning overwrites files at the
 configured output paths, so save a copy first if you want to keep an earlier run.
@@ -250,6 +251,17 @@ reports each category separately. Weekday shifts receive basic coverage, but
 filling all weekday seats is not an objective. A person may stay below their
 hour target when higher priorities require it; all hour, availability, overlap,
 and rest limits remain hard constraints.
+
+### Wellness Wagon
+
+Set `wellness_wagon.enabled` to `true` in `config.json` to create a separate
+`outputs/wellness_wagon.xlsx` file. The scheduler reads the form's **Are you working
+for the Wellness Wagon?** response and its weekday AM/PM Wellness Wagon availability
+columns. It assigns at most the configured `capacity` people per Wellness shift and at
+most one Wellness shift per person in each Monday–Friday week. Wellness is a final,
+lower-priority objective: it cannot reduce the attained ambulance or Campus Response
+results, does not count toward ambulance/CR requirements, and follows the same overlap
+and 12-hour rest rules. It is intentionally excluded from `master_schedule.csv`.
 
 `solver_time_limit_s` is a total search budget shared across stages. `OPTIMAL`
 means a stage was proved optimal given earlier attained results; `FEASIBLE`

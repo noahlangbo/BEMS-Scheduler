@@ -10,7 +10,7 @@ from pathlib import Path
 
 from models import (
     CAMPUS_BLOCKS, HourCaps, LockedAssignment, ShiftKey, all_campus_keys,
-    all_shift_keys, block_dates, campus_ambulance_overlap, interval, is_weekend,
+    all_shift_keys, all_wellness_keys, block_dates, campus_ambulance_overlap, interval, is_weekend,
 )
 
 
@@ -19,12 +19,15 @@ class Configuration:
     dates: list[date]
     providers: dict[ShiftKey, str]
     campus_keys: list[ShiftKey]
+    wellness_keys: list[ShiftKey]
+    wellness_capacity: int
     caps: HourCaps
     campus_capacity: int
     time_limit_s: float
     workers: int
     form_csv: Path
     output_xlsx: Path
+    wellness_output_xlsx: Path | None
     master_csv: Path | None
     block: str
     daynum_start: int
@@ -84,6 +87,14 @@ def load_config(path: str | Path) -> Configuration:
         raise ValueError(f"Choose ALS or BLS for {len(unset)} active shift(s): {examples}")
     campus_keys = [k for k in all_campus_keys(dates) if not any(
         k[0] == d and campus_ambulance_overlap(k[1], s) for d, s in blackouts)]
+    wellness = cfg.get("wellness_wagon", {})
+    if not isinstance(wellness, dict):
+        raise ValueError("wellness_wagon must be a JSON object")
+    wellness_enabled = wellness.get("enabled", False)
+    wellness_capacity = wellness.get("capacity", 1)
+    if type(wellness_enabled) is not bool or type(wellness_capacity) is not int or wellness_capacity < 1:
+        raise ValueError("wellness_wagon.enabled must be true/false and capacity a positive integer")
+    wellness_keys = all_wellness_keys(dates) if wellness_enabled else []
 
     hours = cfg.get("hours", {})
     caps = HourCaps(hours.get("ambulance_emt", 18), hours.get("campus_emt", 6), hours.get("campus_bert", 9))
@@ -121,9 +132,10 @@ def load_config(path: str | Path) -> Configuration:
 
     master = cfg.get("master_schedule_export", {})
     return Configuration(
-        dates, providers, campus_keys, caps, capacity, float(time_limit), workers,
+        dates, providers, campus_keys, wellness_keys, wellness_capacity, caps, capacity, float(time_limit), workers,
         local_path(cfg.get("form_csv", "inputs/responses.csv")),
         local_path(cfg.get("output_xlsx", "outputs/schedule.xlsx")),
+        local_path(wellness.get("output_xlsx", "outputs/wellness_wagon.xlsx")) if wellness_enabled else None,
         local_path(master.get("path", "outputs/master_schedule.csv")) if master.get("enabled", True) else None,
         master.get("block", ""), int(master.get("daynum_start", dates[0].month * 100 + dates[0].day)),
         overrides, locks,

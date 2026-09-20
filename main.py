@@ -6,7 +6,8 @@ import argparse
 from pathlib import Path
 
 from configuration import load_config
-from output import export_master_schedule_csv, export_schedule_xlsx, print_summary
+from output import (export_master_schedule_csv, export_schedule_xlsx,
+                    export_wellness_wagon_xlsx, print_summary)
 from parse_form import load_all_responses
 from solver import solve_schedule
 from validation import validate_schedule
@@ -23,9 +24,11 @@ def run(config_path, check_only=False):
     print("Solving ambulance and campus response together...")
     schedule = solve_schedule(
         people, config.providers, config.campus_keys, config.caps,
-        config.campus_capacity, config.locks, config.time_limit_s, config.workers)
-    errors = validate_schedule(schedule, people, config.providers, config.campus_keys,
-                               config.caps, config.campus_capacity, config.locks)
+        config.campus_capacity, config.locks, config.time_limit_s, config.workers,
+        config.wellness_keys, config.wellness_capacity)
+    errors = validate_schedule(
+        schedule, people, config.providers, config.campus_keys, config.caps,
+        config.campus_capacity, config.locks, config.wellness_keys, config.wellness_capacity)
     if errors:
         raise RuntimeError("Schedule failed validation; nothing exported:\n" + "\n".join(errors))
     print("All hard scheduling rules verified against the resulting assignments.")
@@ -34,6 +37,9 @@ def run(config_path, check_only=False):
         path = export_schedule_xlsx(schedule, people, config.providers, config.caps,
                                     config.output_xlsx, config.campus_capacity)
         print(f"Workbook: {path}")
+        if config.wellness_output_xlsx:
+            path = export_wellness_wagon_xlsx(schedule, config.wellness_output_xlsx)
+            print(f"Wellness Wagon workbook: {path}")
         if config.master_csv:
             path = export_master_schedule_csv(
                 schedule, config.providers, config.dates[0], config.master_csv,

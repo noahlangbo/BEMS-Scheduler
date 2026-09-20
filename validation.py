@@ -7,7 +7,8 @@ from models import HourCaps, Schedule, Volunteer, crew_cap, interval, SHIFT_HOUR
 
 
 def validate_schedule(schedule: Schedule, people, providers, campus_keys,
-                      caps: HourCaps, campus_capacity: int, locks=()) -> list[str]:
+                      caps: HourCaps, campus_capacity: int, locks=(),
+                      wellness_keys=(), wellness_capacity: int = 1) -> list[str]:
     errors = []
     roster = {p.email: p for p in people}
     if len(roster) != len(people):
@@ -16,7 +17,9 @@ def validate_schedule(schedule: Schedule, people, providers, campus_keys,
         errors.append("Ambulance schedule does not match configured active shifts")
     if set(schedule.campus) != set(campus_keys):
         errors.append("Campus schedule does not match configured active blocks")
-    amb_person, cr_person = defaultdict(list), defaultdict(list)
+    if set(schedule.wellness) != set(wellness_keys):
+        errors.append("Wellness Wagon schedule does not match configured active shifts")
+    amb_person, cr_person, wellness_person = defaultdict(list), defaultdict(list), defaultdict(list)
     for ambulance, assignments, expected, index in (
         (True, schedule.ambulance, providers, amb_person),
         (False, schedule.campus, set(campus_keys), cr_person),
@@ -41,17 +44,36 @@ def validate_schedule(schedule: Schedule, people, providers, campus_keys,
                     errors.append(f"{p.full_name}: unavailable assignment {key}")
                 index[p.email].append(key)
 
+    for key, assigned in schedule.wellness.items():
+        if len({p.email for p in assigned}) != len(assigned):
+            errors.append(f"{key}: same person occupies multiple Wellness Wagon seats")
+        if len(assigned) > wellness_capacity:
+            errors.append(f"{key}: {len(assigned)} assigned exceeds Wellness Wagon capacity {wellness_capacity}")
+        for p in assigned:
+            if roster.get(p.email) is not p:
+                errors.append(f"{key}: unknown or duplicate identity {p.email}")
+            if key not in p.wellness_available:
+                errors.append(f"{p.full_name}: unavailable Wellness Wagon assignment {key}")
+            wellness_person[p.email].append(key)
+
     for p in people:
-        ambulance, campus = amb_person[p.email], cr_person[p.email]
+        ambulance, campus, wellness = amb_person[p.email], cr_person[p.email], wellness_person[p.email]
         ambulance_hours = sum(SHIFT_HOURS[k[1]] for k in ambulance)
         campus_hours = 3 * len(campus)
         if ambulance_hours > caps.ambulance:
             errors.append(f"{p.full_name}: ambulance hours exceed {caps.ambulance}")
         if campus_hours > caps.campus_for(p):
             errors.append(f"{p.full_name}: campus hours exceed {caps.campus_for(p)}")
-        if sorted(ambulance) != sorted(getattr(p, "assigned", [])) or sorted(campus) != sorted(p.campus_assigned):
+        if (sorted(ambulance) != sorted(getattr(p, "assigned", [])) or
+                sorted(campus) != sorted(p.campus_assigned) or
+                sorted(wellness) != sorted(p.wellness_assigned)):
             errors.append(f"{p.full_name}: person totals do not match the exported assignments")
-        work = sorted(interval(k) for k in ambulance + campus)
+        weeks = defaultdict(int)
+        for d, _ in wellness:
+            weeks[d - timedelta(days=d.weekday())] += 1
+        if any(count > 1 for count in weeks.values()):
+            errors.append(f"{p.full_name}: more than one Wellness Wagon shift in a week")
+        work = sorted(interval(k) for k in ambulance + campus + wellness)
         if not work:
             continue
         run_start, run_end = work[0]
@@ -70,7 +92,8 @@ def validate_schedule(schedule: Schedule, people, providers, campus_keys,
             if run_end - run_start > timedelta(hours=12):
                 errors.append(f"{p.full_name}: more than 12 continuous hours ending {run_end}")
     for lock in locks:
-        index = amb_person if lock.key[1] in SHIFT_HOURS else cr_person
+        index = (amb_person if lock.key in schedule.ambulance else
+                 cr_person if lock.key in schedule.campus else wellness_person)
         if lock.key not in index[lock.email.strip().lower()]:
             errors.append(f"Locked assignment missing: {lock.email} on {lock.key}")
     return errors
