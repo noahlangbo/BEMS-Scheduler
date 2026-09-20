@@ -52,8 +52,17 @@ def is_big_weekend(d: date, kind: str) -> bool:
 
 
 def crew_cap(d: date, kind: str) -> int:
-    """Volunteer seats; the separately supplied supervisor is not included."""
+    """Maximum volunteer positions in the legacy scheduling model."""
     return 4 if is_big_weekend(d, kind) else 3 if kind == "NIGHT" else 2
+
+
+def ambulance_capacity(d: date, kind: str, provider: str) -> int:
+    """R1 seats visible in Scheduler V3 for the given supervisor type."""
+    if provider == "ALS":
+        return crew_cap(d, kind)
+    # V3 has one BLS daytime crew row (C2) and three BLS night/weekend crew
+    # rows (C2–C4). C1 and C5 are not rendered by its views.
+    return 1 if kind in ("AM", "PM") else 3
 
 
 def block_dates(start: date, end: date) -> list[date]:

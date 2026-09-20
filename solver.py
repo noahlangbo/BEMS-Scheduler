@@ -11,7 +11,7 @@ from ortools.sat.python import cp_model
 from models import (
     CAMPUS_BLOCK_HOURS, SHIFT_HOURS, START_HOURS, BertMember, HourCaps,
     LockedAssignment, Schedule, ShiftKey, SolveStage, Volunteer,
-    WEEKEND_PRIORITY_LABELS, crew_cap, weekend_priority,
+    WEEKEND_PRIORITY_LABELS, ambulance_capacity, weekend_priority,
 )
 
 
@@ -125,10 +125,11 @@ def solve_schedule(
                 by_person[pi].append((key, var))
 
     for key, entries in amb_by_key.items():
-        model.add(sum(v for _, v in entries) <= crew_cap(*key))
+        cap = ambulance_capacity(*key, providers[key])
+        model.add(sum(v for _, v in entries) <= cap)
         if providers[key] == "ALS":
             # An unfilled EVDT seat stays open; Auth never satisfies ALS driving.
-            model.add(sum(v for pi, v in entries if not people[pi].is_evdt) <= crew_cap(*key) - 1)
+            model.add(sum(v for pi, v in entries if not people[pi].is_evdt) <= cap - 1)
     for entries in cr_by_key.values():
         model.add(sum(v for _, v in entries) <= campus_capacity)
     for entries in wellness_by_key.values():
@@ -184,12 +185,11 @@ def solve_schedule(
         model.add(var == 1)
 
     coverage, als_other, campus_coverage = [], [], []
-    weekends = [{name: [] for name in ("als", "ready", "core", "utility", "seats")}
+    weekends = [{name: [] for name in ("als", "core", "seats")}
                 for _ in WEEKEND_PRIORITY_LABELS]
     for key in sorted(providers):
         entries = amb_by_key[key]
         crew = [v for _, v in entries]
-        drivers = [v for pi, v in entries if people[pi].is_driver]
         evdts = [v for pi, v in entries if people[pi].is_evdt]
         coverage.append(_present(model, crew, f"covered_{key}"))
         rank = weekend_priority(*key)
@@ -203,18 +203,6 @@ def solve_schedule(
         core = model.new_int_var(0, 3, f"weekend_core_{key}")
         model.add_min_equality(core, [sum(crew), 3])
         group["core"].append(core)
-        # BLS needs three volunteers with a Utility driver. ALS also needs a
-        # separate EVDT to drive the ambulance while the supervisor treats.
-        requirements = [_at_least(model, crew, 3, f"split_size_{key}"),
-                        _at_least(model, drivers, 2 if providers[key] == "ALS" else 1,
-                                  f"split_drivers_{key}")]
-        if providers[key] == "ALS":
-            requirements.append(_at_least(model, evdts, 1, f"split_evdt_{key}"))
-        else:
-            group["utility"].append(_present(model, drivers, f"utility_{key}"))
-        ready = model.new_bool_var(f"split_ready_{key}")
-        model.add_min_equality(ready, requirements)
-        group["ready"].append(ready)
     for key in campus_keys:
         campus_coverage.append(_present(model, [v for _, v in cr_by_key[key]], f"campus_{key}"))
 
@@ -224,27 +212,19 @@ def solve_schedule(
         objectives.append((f"{WEEKEND_PRIORITY_LABELS[rank]}: {description}",
                            sum(weekends[rank][category])))
 
-    def add_split_crew_objectives(rank):
-        add_weekend_objective(rank, "ready", "shifts ready for split crew")
-        add_weekend_objective(rank, "core", "crew seats toward three volunteers")
-        add_weekend_objective(rank, "utility", "BLS shifts with Utility driver")
-
-    # Night split crews are a higher tier than day crews. Complete both night
-    # categories before fourth seats; a Friday fourth cannot outrank a Saturday third.
+    # Build Friday and Saturday nights toward three volunteers before weekend
+    # day crews. This is ambulance staffing only: Utility vehicles are not modeled.
     for rank in (0, 1):
         add_weekend_objective(rank, "als", "ALS shifts with EVDT")
-        add_split_crew_objectives(rank)
-    # Once night split crews are protected, keep ALS driving ahead of fourth
-    # volunteers. Weekend-day ALS driving retains priority over other ALS driving.
+        add_weekend_objective(rank, "core", "crew seats toward three volunteers")
+    # Keep weekend ALS driving ahead of fourth night volunteers.
     for rank in (2, 3):
         add_weekend_objective(rank, "als", "ALS shifts with EVDT")
     objectives.append(("Other ALS shifts with EVDT", sum(als_other)))
-    # Build Saturday/Sunday crews toward their three-person baseline before
-    # adding fourth volunteers to Friday/Saturday nights. This balances scarce
-    # weekend availability across day and night coverage without displacing a
-    # higher-priority night split crew.
+    # Build Saturday/Sunday crews toward three volunteers before adding fourth
+    # Friday/Saturday-night seats.
     for rank in (2, 3):
-        add_split_crew_objectives(rank)
+        add_weekend_objective(rank, "core", "crew seats toward three volunteers")
     for rank in (0, 1):
         add_weekend_objective(rank, "seats", "volunteer seats filled")
     for rank in (2, 3):

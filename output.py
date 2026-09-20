@@ -29,8 +29,7 @@ from models import (
     SHIFT_TIMES,
     WELLNESS_SHIFT_TIMES,
     Volunteer,
-    crew_cap,
-    is_big_weekend,
+    ambulance_capacity,
 )
 
 # ── Styling ──────────────────────────────────────────────────────────────────
@@ -243,9 +242,6 @@ def collect_warnings(schedule, providers, people, caps):
         if providers[key] == "ALS" and not any(p.is_evdt for p in crew):
             issues.append(("ALS — NO EVDT", d, kind,
                            "No assigned EVDT to drive while the ALS provider treats during transport"))
-        if providers[key] == "BLS" and is_big_weekend(*key) and crew and not any(p.is_driver for p in crew):
-            issues.append(("NO UTILITY DRIVER", d, kind,
-                           "No assigned Utility-qualified volunteer for split crew; supervisor can drive ambulance"))
     for p in sorted(people, key=lambda p: p.full_name):
         if isinstance(p, Volunteer) and p.assigned_hours < caps.ambulance:
             issues.append(("AMBULANCE UNDER HOURS", None, "",
@@ -325,30 +321,26 @@ MASTER_SCHEDULE_HEADER = [
 
 
 def _ambulance_seats(key, people, provider):
-    """Vehicle-specific volunteer seats; supervisors are supplied separately.
+    """R1-only volunteer seats; supervisors are supplied separately.
 
-    ALS reserves an R1/EVDT seat. On weekends a volunteer may drive U1; Auth
-    and EVDT both qualify. BLS never fabricates an R1 driver shortage, and no
-    crew-only EMT is labelled a driver to make the export fit.
+    ALS reserves an R1/EVDT driver row, so its crew begins at C2. BLS crew
+    begins at C1. Weekend capacity changes seat count only, never the vehicle.
     """
     remaining = sorted(people, key=lambda p: p.full_name)
     seats = []
-    cap = crew_cap(*key)
+    cap = ambulance_capacity(*key, provider)
+    next_crew = 2
     if provider == "ALS":
         driver = next((p for p in remaining if p.is_evdt), None)
         seats.append(("R1", "Driver", "EVDT", driver))
         if driver is not None:
             remaining.remove(driver)
-    if is_big_weekend(*key):
-        driver = next((p for p in remaining if p.is_driver), None)
-        if driver is not None or len(seats) + len(remaining) < cap:
-            seats.append(("U1", "Driver", "AUTH", driver))
-            if driver is not None:
-                remaining.remove(driver)
     for p in remaining:
-        seats.append(("R1", f"C{len(seats) + 1}", "CREW", p))
+        seats.append(("R1", f"C{next_crew}", "CREW", p))
+        next_crew += 1
     while len(seats) < cap:
-        seats.append(("R1", f"C{len(seats) + 1}", "CREW", None))
+        seats.append(("R1", f"C{next_crew}", "CREW", None))
+        next_crew += 1
     if len(seats) > cap:
         raise ValueError(f"Export would exceed capacity for {key}")
     return seats

@@ -3,7 +3,7 @@
 from collections import defaultdict
 from datetime import timedelta
 
-from models import HourCaps, Schedule, Volunteer, crew_cap, interval, SHIFT_HOURS
+from models import HourCaps, Schedule, Volunteer, ambulance_capacity, interval, SHIFT_HOURS
 
 
 def validate_schedule(schedule: Schedule, people, providers, campus_keys,
@@ -29,7 +29,7 @@ def validate_schedule(schedule: Schedule, people, providers, campus_keys,
                 continue
             if len({p.email for p in assigned}) != len(assigned):
                 errors.append(f"{key}: same person occupies multiple seats")
-            cap = crew_cap(*key) if ambulance else campus_capacity
+            cap = ambulance_capacity(*key, providers[key]) if ambulance else campus_capacity
             if len(assigned) > cap:
                 errors.append(f"{key}: {len(assigned)} assigned exceeds capacity {cap}")
             if ambulance and providers[key] == "ALS" and sum(not p.is_evdt for p in assigned) > cap - 1:
