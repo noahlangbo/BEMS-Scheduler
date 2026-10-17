@@ -60,9 +60,9 @@ def ambulance_capacity(d: date, kind: str, provider: str) -> int:
     """R1 seats visible in Scheduler V3 for the given supervisor type."""
     if provider == "ALS":
         return crew_cap(d, kind)
-    # V3 has one BLS daytime crew row (C2) and three BLS night/weekend crew
-    # rows (C2–C4). C1 and C5 are not rendered by its views.
-    return 1 if kind in ("AM", "PM") else 3
+    # A qualified volunteer driver occupies one of the BLS positions.
+    # Friday/Saturday nights and weekend days allow four volunteers total.
+    return 1 if kind in ("AM", "PM") else crew_cap(d, kind)
 
 
 def block_dates(start: date, end: date) -> list[date]:
