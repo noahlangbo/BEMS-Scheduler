@@ -321,13 +321,7 @@ MASTER_SCHEDULE_HEADER = [
 
 
 def _ambulance_seats(key, people, provider):
-    """Place volunteer drivers before crew, matching Scheduler V3 seat rows.
-
-    ALS always preserves an EVDT-only Driver seat, even if it stays open; an
-    Auth then occupies C2 or later. On BLS, an EVDT takes Driver first, then
-    an Auth; if neither is assigned, volunteers fill crew seats and the
-    supervisor is the fallback driver. Capacity counts people, not empty seats.
-    """
+    """Export every volunteer seat, including vacancies, in C1–C4 order."""
     remaining = sorted(people, key=lambda p: p.full_name)
     seats = []
     cap = ambulance_capacity(*key, provider)
@@ -339,11 +333,12 @@ def _ambulance_seats(key, people, provider):
         driver = next((p for p in remaining if p.is_evdt), None)
         if driver is None:
             driver = next((p for p in remaining if p.certification == "Auth"), None)
-        if driver is not None:
-            seats.append(("R1", "Driver", driver.certification.upper(), driver))
+        if driver is None and len(remaining) == cap:
+            driver = remaining[0]
+        seats.append(("R1", "Driver", "CREW", driver))
     if driver is not None:
         remaining.remove(driver)
-    crew_slots = cap - (1 if driver is not None or provider == "ALS" else 0)
+    crew_slots = cap - 1
     for i in range(crew_slots):
         person = remaining[i] if i < len(remaining) else None
         seats.append(("R1", f"C{i + 2}", "CREW", person))
@@ -360,12 +355,13 @@ def export_master_schedule_csv(schedule, providers, block_start, output_path,
     def row(key, vehicle, seat, requires, person):
         d, kind = key
         date_id = f"{d.month:02d}{d.day:02d}"
-        suffix = requires if seat == "Driver" else seat
+        suffix = "C1" if seat == "Driver" else seat
         shift_id = f"{block}-{date_id}-{kind}-{vehicle}-{suffix}"
         return [shift_id, f"{d.month}/{d.day}/{d:%y}", kind, vehicle,
                 seat, requires, person.full_name if person else ""]
 
-    for key, people in sorted(schedule.ambulance.items()):
+    shift_order = {"AM": 0, "PM": 1, "DAY": 0, "NIGHT": 2}
+    for key, people in sorted(schedule.ambulance.items(), key=lambda item: (item[0][0], shift_order[item[0][1]])):
         for vehicle, seat, requires, person in _ambulance_seats(key, people, providers[key]):
             rows.append(row(key, vehicle, seat, requires, person))
     for key, people in sorted(schedule.campus.items()):

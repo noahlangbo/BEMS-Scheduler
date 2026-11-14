@@ -82,7 +82,8 @@ class MemberAttributeTests(unittest.TestCase):
         shift = (date(2026, 9, 21), "AM")
         senior = Volunteer("Senior", "Member", "senior@example.edu", available={shift})
         junior = Volunteer("Junior", "Member", "junior@example.edu", available={shift})
-        apply_member_attributes(self.path, [senior, junior])
+        other = Volunteer("Other", "Member", "other@example.edu", available={shift})
+        apply_member_attributes(self.path, [senior, junior, other])
         priority = {
             "id": "custom:class-year", "label": "Prioritize class year",
             "service": "ambulance", "metric": "assignments",
@@ -91,11 +92,12 @@ class MemberAttributeTests(unittest.TestCase):
             "shifts": ["AM"], "direction": "maximize",
         }
         result = solve_schedule(
-            [junior, senior], {shift: "BLS"}, [], HourCaps(6, 0, 9), time_limit_s=5,
+            [junior, other, senior], {shift: "BLS"}, [], HourCaps(6, 0, 9), time_limit_s=5,
             workers=1, objective_order=(priority["id"], *DEFAULT_OBJECTIVE_ORDER),
             custom_priorities=[priority],
         )
-        self.assertEqual(result.ambulance[shift], [senior])
+        self.assertIn(senior, result.ambulance[shift])
+        self.assertEqual(len(result.ambulance[shift]), 2)
 
 
 if __name__ == "__main__":

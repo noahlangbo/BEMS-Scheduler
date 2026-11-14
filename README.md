@@ -287,16 +287,18 @@ Duplicate responses use the latest timestamp for each email, including role chan
 
 `output_xlsx` sets the workbook path. `master_schedule_export.path` sets the CSV
 path; set `master_schedule_export.enabled` to `false` if you only want the workbook.
-The CSV columns are `Block, ShiftID, Date, Shift, Vehicle, Seat, Requires, Assigned/Name`.
-ALS ambulance Driver rows use `R1`/`EVDT`; Utility Driver rows use `U1`/`AUTH`
-(EVDT also qualifies); other volunteer seats use `CREW`. Campus rows use `CR`.
-Supervisors are not duplicated in these volunteer rows.
+The CSV columns are `ShiftID, Date, Shift, Vehicle, Seat, Requires, Assigned/Name`.
+Every active ambulance shift includes all volunteer seats, including unassigned
+seats. Weekday AM/PM shifts have two seats, ordinary nights have three, and
+Friday/Saturday nights and Saturday/Sunday days have four. The supervisor is
+additional. ALS C1 requires an EVDT; BLS C1 can be filled by a crew member.
+Campus Response seats use `CR`. Closed shifts do not produce rows.
 
-`daynum_start` is a sequential identifier, not a changing calendar date: starting
-at `921`, September 30 is `930` and October 1 is `931`. Coordinate this with the
-Master Schedule's ID convention when setting up a new block. Vehicle/seat IDs
-reflect the current driving roles; review the whole export before replacing
-rows from the older R1-only export format.
+Shift IDs use the calendar date (MMDD) and a stable seat suffix: C1 through C4
+for ambulance seats, including the Driver row shown as C1 in the sheet. Review
+existing rows when importing an updated export: replace the old block rather
+than appending duplicate rows. The CSV is ordered AM, PM, then NIGHT so calendar
+views that use row order display the shifts correctly.
 
 ## What each file is for
 

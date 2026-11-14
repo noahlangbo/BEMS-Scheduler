@@ -248,6 +248,8 @@ class InputTests(unittest.TestCase):
                                  'Driver', 'Person', 'Authorized - Utility 1', 'AM', '', '', '', ''])
                 writer.writerow(['9/18/2026 10:00:00', 'other@example.com', 'Ambulance EMT',
                                  'Other', 'Person', 'Not a driver', 'AM', '', '', '', ''])
+                writer.writerow(['9/18/2026 10:00:00', 'third@example.com', 'Ambulance EMT',
+                                 'Third', 'Person', 'Not a driver', 'AM', '', '', '', ''])
             custom = dict(id='custom:bls-driver', label='BLS driver coverage',
                           service='ambulance', metric='covered_shifts', member_filter='driver',
                           provider='BLS', weekdays=[0], shifts=['AM'], direction='maximize')
@@ -261,8 +263,8 @@ class InputTests(unittest.TestCase):
             path.write_text(json.dumps(cfg))
             with contextlib.redirect_stdout(io.StringIO()):
                 schedule = run(path, check_only=True)
-            self.assertEqual([p.email for p in schedule.ambulance[(D, 'AM')]],
-                             ['driver@example.com'])
+            self.assertIn('driver@example.com', [p.email for p in schedule.ambulance[(D, 'AM')]])
+            self.assertEqual(len(schedule.ambulance[(D, 'AM')]), 2)
             self.assertEqual(schedule.stages[0].value, 1)
 
     def test_forced_crew_is_required_and_respects_hours_and_availability(self):
