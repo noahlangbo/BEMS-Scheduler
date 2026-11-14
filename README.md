@@ -8,34 +8,15 @@ Wellness Wagon can be enabled as a separate, manual-entry workbook. It never cha
 **Workflow: export responses → configure the block in the local browser editor → run → review the output.** The JSON file remains available for advanced manual editing.
 The program reads a downloaded file. It does not connect to or update Google Sheets.
 
-The current `main` branch includes the local browser configuration editor and macOS desktop installer. The editor runs in your browser on your own computer; it edits the local configuration and does not sync live with Google Sheets. `feature/officer-editor` currently matches `main`; use the latest repository download for new installations. The pre-forced-crew version remains on [`legacy-before-forces`](https://github.com/noahlangbo/BEMS-Scheduler/tree/legacy-before-forces).
+The `main` branch includes the local browser configuration editor and macOS desktop installer. The editor runs on your computer and does not sync live with Google Sheets. The pre-forced-crew version remains on [`legacy-before-forces`](https://github.com/noahlangbo/BEMS-Scheduler/tree/legacy-before-forces).
 
-## 1. Set up the project once
+## 1. Install or update on macOS
 
-These commands are for macOS/Linux and have been tested with Python 3.11.
-If you already have this project, open Terminal in the `BEMS-Scheduler` folder
-(the folder containing `main.py` and `config.json`) and skip the download commands.
+1. [Download the latest installer ZIP](https://github.com/noahlangbo/BEMS-Scheduler/archive/refs/heads/main.zip) and unzip it.
+2. Open the extracted folder and double-click **Install on Desktop.command**. Confirm the prompt. If macOS blocks it, Control-click the file and choose **Open**.
+3. Open **BEMS Scheduler** on your Desktop, then double-click **Open BEMS Editor.command**. Keep its window open while using the editor. Use **Run Scheduler.command** to run the saved configuration.
 
-To download a new copy:
-
-```sh
-git clone https://github.com/noahlangbo/BEMS-Scheduler.git
-cd BEMS-Scheduler
-```
-
-To install the desktop copy, double-click `Install on Desktop.command` in the downloaded repository folder. To use the editor, double-click `Open BEMS Editor.command` from the installed folder; keep its Terminal window open while editing. To update later, download the latest repository version and run its installer again. It replaces the program files, carries forward your configs and local data, and keeps a full rollback copy on your Desktop. The installed editor does not fetch GitHub changes automatically; rerun the installer when you want the latest editor features.
-
-For a manual Terminal setup, create the project's Python environment and install its dependencies:
-
-```sh
-python3 --version
-python3 -m venv .venv
-.venv/bin/python -m pip install -r requirements.txt
-```
-
-If `python3` is missing, install Python 3.11 before continuing. If `.venv` already
-exists and the dependencies are installed, you can skip setup. All commands
-below run from the project folder; there is no need to activate the environment.
+The installer downloads a private Python runtime if needed and installs dependencies; internet is required. It does not change system Python. To update, download a fresh ZIP and run its installer again. Existing configuration and local data are preserved, and a full rollback copy is kept on the Desktop. The installed copy does not update automatically. Windows is not supported by this installer.
 
 ## 2. Save the responses for this block
 
@@ -44,11 +25,7 @@ and response rows; no manual reformatting is needed. The parser supports the
 existing BEMS legacy, shopping-period, and Block 2 forms. A redesigned form may
 need parser changes.
 
-Create an input folder if it does not exist:
-
-```sh
-mkdir -p inputs
-```
+In the installed BEMS Scheduler folder, create an `inputs` folder in Finder if it does not already exist.
 
 Put the exported CSV inside `inputs`, rename it `form_responses.csv`, and set
 this entry in `config.json`:
@@ -90,7 +67,11 @@ The checked-in configuration is for **September 21–October 18, 2026**, with th
 block's supplied ALS roster and BLS on all remaining shifts. For another block,
 replace the dates and provider entries rather than reusing that roster.
 
-### Enter ALS/BLS for every day and night
+### Enter supervisor coverage and closures
+
+In the supervisor calendar, choose **Closed** for a shift when BEMS is closed, or click **Close day** to close all shifts starting that date. Closed shifts produce no ambulance seats, overlapping Campus Response blocks, or Wellness Wagon shifts. A night shift runs from 7 p.m. to 7 a.m. the next day: close the previous night too if the closure starts before that shift ends. Reopen a shift by choosing ALS or BLS. Existing advanced `blackout_periods` continue to apply.
+
+### Manual configuration
 
 Inside `shift_providers`, include `DAY` and `NIGHT` entries for **every date** in
 the block. For example, the entries for one date look like this:
@@ -125,11 +106,7 @@ correction, blackout, different output location, or longer solve time.
 
 ## 4. Generate and review the schedule
 
-Run:
-
-```sh
-.venv/bin/python main.py
-```
+Double-click **Run Scheduler.command** on your Desktop. Choose the configuration (press Return for the default), then choose **1** to check without exporting or **2** to generate the files. For a full run, type `EXPORT` when prompted.
 
 The program reads responses, solves ambulance and campus assignments together,
 and independently checks the resulting assignments before exporting. A successful
@@ -155,11 +132,7 @@ Warnings and Hour Summary before using the schedule:
 - `AMBULANCE UNDER HOURS` / `CAMPUS UNDER HOURS`: a person is below that service's target.
 - `SOLVER LIMIT`: the solver returned a valid schedule but did not prove all priority stages optimal. Try increasing `solver_time_limit_s` from `30` to `60`.
 
-To solve and validate **without writing output files**, use this instead:
-
-```sh
-.venv/bin/python main.py --check
-```
+Choose **1** in the launcher to solve and validate without writing output files.
 
 ## If something goes wrong
 
@@ -169,7 +142,7 @@ To solve and validate **without writing output files**, use this instead:
 | No scheduling columns match the configured block dates | Check that the input is this block's response export and that the configured dates match it. |
 | Choose ALS or BLS / invalid or outside the block / duplicate provider setting | Complete the provider list, remove old dates, and use either `DAY` or `AM` + `PM` for each weekday. |
 | JSON error | Check quotes and commas in `config.json` and any optional local JSON files. |
-| Missing Python module | Run `.venv/bin/python -m pip install -r requirements.txt`, then use `.venv/bin/python main.py`. |
+| Missing Python module | Run the downloaded installer again to repair the local environment. |
 | Unknown member role / response timestamp cannot be parsed | Check the original response export. Changed form wording or timestamp formats may require a parser update. |
 | Solver fails with `INFEASIBLE` | Check optional locked assignments for conflicts with availability, hour caps, or work/rest rules. |
 | Solver fails with `UNKNOWN` | Increase `solver_time_limit_s` and retry. |
