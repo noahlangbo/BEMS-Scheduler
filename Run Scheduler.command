@@ -4,9 +4,8 @@ set -euo pipefail
 pause() { printf '\nPress Return to close this window... '; read -r _answer || true; }
 trap 'status=$?; if (( status != 0 )); then printf "\nScheduler failed (exit %s). Check the message above.\n" "$status" >&2; fi; pause' EXIT
 here=$(cd -- "$(dirname -- "$0")" && pwd -P) || exit 1
-if [[ -f "$here/main.py" && -x "$here/.venv/bin/python" ]]; then project="$here"
-else project="$HOME/Desktop/BEMS Scheduler"; fi
-[[ -f "$project/main.py" && -x "$project/.venv/bin/python" ]] || { printf 'Installed project not found at %s. Run Install on Desktop.command first.\n' "$project" >&2; exit 1; }
+project="$here"
+[[ -f "$project/main.py" && -x "$project/.venv/bin/python" ]] || { printf 'Scheduler setup not found in %s. Run Set Up Scheduler.command in this same folder first.\n' "$project" >&2; exit 1; }
 printf 'Config file (default: %s/config.json; or config_f26b3.json): ' "$project"
 read -r chosen || exit 1
 config=${chosen:-"$project/config.json"}

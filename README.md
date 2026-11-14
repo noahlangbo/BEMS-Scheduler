@@ -10,13 +10,13 @@ The program reads a downloaded file. It does not connect to or update Google She
 
 The `main` branch includes the local browser configuration editor and macOS desktop installer. The editor runs on your computer and does not sync live with Google Sheets. The pre-forced-crew version remains on [`legacy-before-forces`](https://github.com/noahlangbo/BEMS-Scheduler/tree/legacy-before-forces).
 
-## 1. Install or update on macOS
+## 1. Set up a folder for each block on macOS
 
-1. [Download the latest installer ZIP](https://github.com/noahlangbo/BEMS-Scheduler/archive/refs/heads/main.zip) and unzip it.
-2. Open the extracted folder and double-click **Install on Desktop.command**. Confirm the prompt. If macOS blocks it, Control-click the file and choose **Open**.
-3. Open **BEMS Scheduler** on your Desktop, then double-click **Open BEMS Editor.command**. Keep its window open while using the editor. Use **Run Scheduler.command** to run the saved configuration.
+1. [Download the latest scheduler ZIP](https://github.com/noahlangbo/BEMS-Scheduler/archive/refs/heads/main.zip) and unzip it. Rename and move the extracted folder where you want to keep this block **before** setup, for example `BEMS Block 4`.
+2. Inside that folder, double-click **Set Up Scheduler.command**. It sets up this folder in place. If macOS blocks it, Control-click and choose **Open**.
+3. Double-click **Open BEMS Editor.command** in the same folder and leave its window open. Use **Run Scheduler.command** from the same folder to check or generate the schedule.
 
-The installer downloads a private Python runtime if needed and installs dependencies; internet is required. It does not change system Python. To update, download a fresh ZIP and run its installer again. Existing configuration and local data are preserved, and a full rollback copy is kept on the Desktop. The installed copy does not update automatically. Windows is not supported by this installer.
+The folder contains the local configuration, `inputs`, `outputs`, and Python environment. If needed, a verified private Python runtime is downloaded into the folder as well. Setup requires internet and does not change system Python. Keep the folder in its chosen location after setup. For the next block, download a fresh ZIP and repeat; it will not reuse an earlier block's settings. Existing installations are not changed. Windows is not supported by this installer.
 
 ## 2. Save the responses for this block
 
@@ -25,7 +25,7 @@ and response rows; no manual reformatting is needed. The parser supports the
 existing BEMS legacy, shopping-period, and Block 2 forms. A redesigned form may
 need parser changes.
 
-In the installed BEMS Scheduler folder, create an `inputs` folder in Finder if it does not already exist.
+Place the CSV in the `inputs` folder inside this block’s scheduler folder.
 
 Put the exported CSV inside `inputs`, rename it `form_responses.csv`, and set
 this entry in `config.json`:
@@ -108,7 +108,7 @@ correction, blackout, different output location, or longer solve time.
 
 ## 4. Generate and review the schedule
 
-Double-click **Run Scheduler.command** on your Desktop. Choose the configuration (press Return for the default), then choose **1** to check without exporting or **2** to generate the files. For a full run, type `EXPORT` when prompted.
+Double-click **Run Scheduler.command** inside this block’s scheduler folder. Choose the configuration (press Return for the default), then choose **1** to check without exporting or **2** to generate the files. For a full run, type `EXPORT` when prompted.
 
 The program reads responses, solves ambulance and campus assignments together,
 and independently checks the resulting assignments before exporting. A successful
@@ -140,7 +140,7 @@ Choose **1** in the launcher to solve and validate without writing output files.
 
 | Message or problem | What to do |
 | --- | --- |
-| File not found | Check `form_csv` and the actual filename/location. Private inputs must be supplied separately after cloning. |
+| File not found | Check `form_csv` and the actual filename/location. Check that the input is inside this block folder or that the absolute path is correct. |
 | No scheduling columns match the configured block dates | Check that the input is this block's response export and that the configured dates match it. |
 | Choose ALS or BLS / invalid or outside the block / duplicate provider setting | Complete the provider list, remove old dates, and use either `DAY` or `AM` + `PM` for each weekday. |
 | JSON error | Check quotes and commas in `config.json` and any optional local JSON files. |
