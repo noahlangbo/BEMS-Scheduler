@@ -270,22 +270,27 @@ def parse_blackouts(raw: str, year: int) -> tuple[set, set]:
 
 _WEEKDAY_NUMBERS = {"MON": 0, "TUE": 1, "WED": 2, "THU": 3,
                     "FRI": 4, "SAT": 5, "SUN": 6}
+_CLASS_TIME = r"\d{1,2}:\d{2}(?:\s*[AP]M)?"
 _CLASS_WEEKLY = re.compile(
-    r"^WEEKLY\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})$",
+    rf"^WEEKLY\s+(MON|TUE|WED|THU|FRI|SAT|SUN)\s+({_CLASS_TIME})\s*[-–]\s*({_CLASS_TIME})$",
     re.IGNORECASE,
 )
 _CLASS_DATED = re.compile(
-    r"^(\d{4}-\d{2}-\d{2})\s+(\d{1,2}:\d{2})\s*[-–]\s*(\d{1,2}:\d{2})$"
+    rf"^(\d{{4}}-\d{{2}}-\d{{2}})\s+({_CLASS_TIME})\s*[-–]\s*({_CLASS_TIME})$",
+    re.IGNORECASE,
 )
 
 
 def _minutes_since_midnight(value: str) -> int:
-    m = re.fullmatch(r"(\d{1,2}):(\d{2})", value)
+    m = re.fullmatch(r"(\d{1,2}):(\d{2})(?:\s*([AP]M))?", value, re.IGNORECASE)
     if not m:
-        raise ValueError(f"Invalid class-conflict time {value!r}; use HH:MM in 24-hour time")
-    hour, minute = map(int, m.groups())
-    if hour > 23 or minute > 59:
-        raise ValueError(f"Invalid class-conflict time {value!r}; use HH:MM in 24-hour time")
+        raise ValueError(f"Invalid class-conflict time {value!r}")
+    hour, minute = int(m.group(1)), int(m.group(2))
+    suffix = m.group(3)
+    if minute > 59 or (suffix and not 1 <= hour <= 12) or (not suffix and hour > 23):
+        raise ValueError(f"Invalid class-conflict time {value!r}")
+    if suffix:
+        hour = hour % 12 + (12 if suffix.upper() == "PM" else 0)
     return hour * 60 + minute
 
 
@@ -333,6 +338,8 @@ def parse_class_conflict_blocks(raw: str, block_start: date, block_end: date) ->
                 "or YYYY-MM-DD 13:00-14:30"
             )
 
+        if bool(re.search(r"[AP]M$", start_s, re.IGNORECASE)) != bool(re.search(r"[AP]M$", end_s, re.IGNORECASE)):
+            raise ValueError(f"Specify AM/PM for both class-conflict times or use 24-hour time: {line!r}")
         start_min, end_min = _minutes_since_midnight(start_s), _minutes_since_midnight(end_s)
         if end_min <= start_min:
             raise ValueError(f"Class-conflict end time must be after start time: {line!r}")
