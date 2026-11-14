@@ -182,6 +182,18 @@ class InputTests(unittest.TestCase):
         self.assertEqual(emts[0].available, {(D, 'AM')})
         self.assertEqual(emts[0].campus_available, {(D, 'A')})
 
+    def test_class_conflicts_accept_explicit_am_pm(self):
+        hard, soft = parse_class_conflict_blocks('Weekly Mon 10:00 AM - 10:50 AM', D, D)
+        self.assertEqual(hard, set())
+        self.assertEqual(soft, {(D, 'B')})
+        hard, soft = parse_class_conflict_blocks('2026-09-21 12:00 PM - 1:30 PM', D, D)
+        self.assertEqual(hard, {(D, 'B')})
+        self.assertEqual(soft, {(D, 'C')})
+        with self.assertRaisesRegex(ValueError, 'both'):
+            parse_class_conflict_blocks('Weekly Mon 10:00 - 11:00 AM', D, D)
+        with self.assertRaises(ValueError):
+            parse_class_conflict_blocks('Weekly Mon 13:00 PM - 14:00 PM', D, D)
+
     def test_malformed_class_conflict_is_rejected(self):
         with self.assertRaisesRegex(ValueError, 'Could not parse class-conflict line'):
             parse_class_conflicts('Tuesday 10:30 to 11:50', D, D)
