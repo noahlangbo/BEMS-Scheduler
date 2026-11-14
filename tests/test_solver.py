@@ -58,16 +58,18 @@ class SchedulingTests(unittest.TestCase):
         shift = (D, 'AM')
         driver = emt('Driver', 'EVDT', ambulance={shift})
         other = emt('Other', 'EMT', ambulance={shift})
+        third = emt('Third', 'EMT', ambulance={shift})
         custom = dict(id='custom:driver-choice', label='Driver on day shift',
                       service='ambulance', metric='assignments', member_filter='driver',
                       provider='BLS', weekdays=[0], shifts=['AM'], direction='maximize')
         order = (custom['id'], *DEFAULT_OBJECTIVE_ORDER)
-        result = solve_schedule([other, driver], {shift: 'BLS'}, [], HourCaps(6, 0, 9),
+        result = solve_schedule([other, third, driver], {shift: 'BLS'}, [], HourCaps(6, 0, 9),
                                 time_limit_s=5, workers=1, objective_order=order,
                                 custom_priorities=[custom])
-        self.assertEqual([p.email for p in result.ambulance[shift]], [driver.email])
+        self.assertIn(driver.email, [p.email for p in result.ambulance[shift]])
+        self.assertEqual(len(result.ambulance[shift]), 2)
         self.assertEqual(result.stages[0].name, 'Custom (maximize): Driver on day shift [custom:driver-choice]')
-        self.assertEqual(validate_schedule(result, [other, driver], {shift: 'BLS'}, [], HourCaps(6, 0, 9), 2), [])
+        self.assertEqual(validate_schedule(result, [other, third, driver], {shift: 'BLS'}, [], HourCaps(6, 0, 9), 2), [])
         with self.assertRaisesRegex(ValueError, 'ALS/BLS provider filters'):
             solve_schedule([other], {shift: 'BLS'}, [], custom_priorities=[{**custom, 'service': 'campus'}],
                            objective_order=order)
@@ -90,7 +92,7 @@ class SchedulingTests(unittest.TestCase):
         self.assertTrue(any('not individually feasible' in warning for warning in warnings))
         over_capacity = {**req, 'min_people': 3}
         capacity_warnings = hard_requirement_warnings([over_capacity], [driver], providers, [], 2)
-        self.assertTrue(any('shift capacity is 1' in warning for warning in capacity_warnings))
+        self.assertTrue(any('shift capacity is 2' in warning for warning in capacity_warnings))
         with self.assertRaisesRegex(RuntimeError, 'INFEASIBLE'):
             solve_schedule([driver], providers, [], HourCaps(6, 0, 9), time_limit_s=5,
                            workers=1, hard_requirements=[impossible])
@@ -421,12 +423,9 @@ class SchedulingTests(unittest.TestCase):
                     providers = {k: 'BLS' for k in weekdays}
                     providers[weekend] = provider
                     result = self.solve(people, providers, caps=HourCaps(12, 0, 9))
-                    self.assertEqual(len(result.ambulance[weekend]), 4 if provider == 'ALS' else 3)
-                    if provider == 'ALS':
-                        self.assertEqual(flexible.assigned, [weekend])
-                    else:
-                        self.assertNotIn(weekend, flexible.assigned)
-                    self.assertTrue(all(len(result.ambulance[k]) == 1 for k in weekdays))
+                    self.assertEqual(len(result.ambulance[weekend]), 4)
+                    self.assertEqual(flexible.assigned, [weekend])
+                    self.assertTrue(all(len(result.ambulance[k]) >= 1 for k in weekdays))
 
     def test_weekend_staffing_outranks_total_hours_without_losing_coverage(self):
         weekday_night = (D + timedelta(days=2), 'NIGHT')
@@ -465,7 +464,7 @@ class SchedulingTests(unittest.TestCase):
     def test_crew_and_campus_capacity(self):
         people = [emt(str(i), ambulance={(D, 'AM')}, campus={(D, 'C')}) for i in range(6)]
         result = self.solve(people)
-        self.assertEqual(len(result.ambulance[D, 'AM']), 1)
+        self.assertEqual(len(result.ambulance[D, 'AM']), 2)
         self.assertEqual(len(result.campus[D, 'C']), 2)
 
     def test_rerun_does_not_accumulate_assignments(self):

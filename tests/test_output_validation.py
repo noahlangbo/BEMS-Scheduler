@@ -64,9 +64,9 @@ class OutputTests(unittest.TestCase):
         crew = Volunteer('Crew', 'Person', 'crew@example.com')
         rows = self.export(Schedule({key: [auth, crew]}, {}), {key: 'BLS'})
         self.assertEqual([(r['Vehicle'], r['Seat'], r['Requires'], r['Assigned/Name']) for r in rows],
-                         [('R1', 'Driver', 'AUTH', 'Auth Person'),
+                         [('R1', 'Driver', 'CREW', 'Auth Person'),
                           ('R1', 'C2', 'CREW', 'Crew Person'),
-                          ('R1', 'C3', 'CREW', '')])
+                          ('R1', 'C3', 'CREW', ''), ('R1', 'C4', 'CREW', '')])
 
     def test_bls_evdt_is_driver_ahead_of_auth(self):
         key = (D + timedelta(days=4), 'NIGHT')
@@ -74,15 +74,15 @@ class OutputTests(unittest.TestCase):
         auth = Volunteer('Auth', 'Person', 'auth@example.com', 'Auth')
         rows = self.export(Schedule({key: [auth, evdt]}, {}), {key: 'BLS'})
         self.assertEqual([(r['Seat'], r['Requires'], r['Assigned/Name']) for r in rows],
-                         [('Driver', 'EVDT', 'EVDT Person'),
-                          ('C2', 'CREW', 'Auth Person'), ('C3', 'CREW', '')])
+                         [('Driver', 'CREW', 'EVDT Person'),
+                          ('C2', 'CREW', 'Auth Person'), ('C3', 'CREW', ''), ('C4', 'CREW', '')])
 
     def test_export_matches_live_v3_header_and_uses_calendar_date_in_id(self):
         key = (date(2026, 10, 1), 'NIGHT')
         rows = self.export(Schedule({key: []}, {}), {key: 'BLS'})
         self.assertEqual(list(rows[0].keys()),
                          ['ShiftID', 'Date', 'Shift', 'Vehicle', 'Seat', 'Requires', 'Assigned/Name'])
-        self.assertEqual(rows[0]['ShiftID'], 'F26B2-1001-NIGHT-R1-C2')
+        self.assertEqual(rows[0]['ShiftID'], 'F26B2-1001-NIGHT-R1-C1')
 
     def test_als_keeps_evdt_truck_seat_open_when_only_auth_available(self):
         key = (D, 'AM')
@@ -96,7 +96,7 @@ class OutputTests(unittest.TestCase):
         person = Volunteer('One', 'EMT', 'one@example.com')
         rows = self.export(Schedule({key: [person]}, {}), {key: 'BLS'})
         self.assertEqual([(r['Vehicle'], r['Seat'], r['Requires'], r['Assigned/Name']) for r in rows],
-                         [('R1', 'C2', 'CREW', 'One EMT')])
+                         [('R1', 'Driver', 'CREW', ''), ('R1', 'C2', 'CREW', 'One EMT')])
 
     def test_als_weekend_keeps_evdt_driver_and_numbers_crew_from_c2(self):
         key = (D + timedelta(days=4), 'NIGHT')
@@ -107,6 +107,30 @@ class OutputTests(unittest.TestCase):
         self.assertEqual((assigned['EVDT Person']['Vehicle'], assigned['EVDT Person']['Seat']), ('R1', 'Driver'))
         self.assertEqual((assigned['Auth Person']['Vehicle'], assigned['Auth Person']['Seat']), ('R1', 'C2'))
         self.assertTrue(all(r['Vehicle'] == 'R1' for r in rows))
+
+    def test_seat_counts_and_order_for_each_provider_and_shift(self):
+        shifts = [(0, 'AM', 2), (0, 'PM', 2), (0, 'NIGHT', 3),
+                  (4, 'NIGHT', 4), (5, 'DAY', 4), (5, 'NIGHT', 4),
+                  (6, 'DAY', 4), (6, 'NIGHT', 3)]
+        for provider in ('ALS', 'BLS'):
+            for offset, kind, count in shifts:
+                key = (D + timedelta(days=offset), kind)
+                with self.subTest(provider=provider, key=key):
+                    rows = self.export(Schedule({key: []}, {}), {key: provider})
+                    self.assertEqual([r['Seat'] for r in rows],
+                                     ['Driver'] + [f'C{i}' for i in range(2, count + 1)])
+                    self.assertTrue(all(not r['Assigned/Name'] for r in rows))
+
+    def test_fully_staffed_bls_crew_is_not_dropped(self):
+        key = (D, 'AM')
+        people = [Volunteer(str(i), 'EMT', f'{i}@example.com') for i in range(2)]
+        rows = self.export(Schedule({key: people}, {}), {key: 'BLS'})
+        self.assertEqual({r['Assigned/Name'] for r in rows}, {p.full_name for p in people})
+
+    def test_am_rows_precede_pm_rows_even_when_input_is_reversed(self):
+        am, pm = (D, 'AM'), (D, 'PM')
+        rows = self.export(Schedule({pm: [], am: []}, {}), {am: 'BLS', pm: 'BLS'})
+        self.assertEqual([r['Shift'] for r in rows], ['AM', 'AM', 'PM', 'PM'])
 
     def test_export_respects_campus_capacity_and_keeps_everyone(self):
         people = [BertMember(str(i), 'Campus', f'{i}@example.com') for i in range(3)]
