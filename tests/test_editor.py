@@ -55,6 +55,16 @@ class EditorTests(unittest.TestCase):
         self.assertNotIn('2026-09-21:DAY', new['shift_providers'])
         self.assertEqual(new['objective_order'], list(editor.DEFAULT_PRIORITIES))
 
+    def test_closed_shift_round_trips(self):
+        version, submitted = self.submission()
+        submitted['shift_providers']['2026-09-21:AM'] = 'CLOSED'
+        editor.save_config(self.path, version, submitted)
+        from configuration import load_config
+        saved = json.loads(self.path.read_text())
+        self.assertEqual(saved['shift_providers']['2026-09-21:AM'], 'CLOSED')
+        cfg = load_config(self.path)
+        self.assertNotIn((__import__('datetime').date(2026, 9, 21), 'AM'), cfg.providers)
+
     def test_backup_preserves_private_permissions_and_fractional_time(self):
         os.chmod(self.path, 0o600)
         version, submitted = self.submission()

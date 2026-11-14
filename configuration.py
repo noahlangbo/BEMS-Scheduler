@@ -97,6 +97,10 @@ def load_config(path: str | Path) -> Configuration:
             if key in providers:
                 raise ValueError(f"Duplicate provider setting for {key}; do not overlap DAY with AM/PM")
             providers[key] = provider.upper() if isinstance(provider, str) else provider
+    closed = {k for k, provider in providers.items() if provider == "CLOSED"}
+    blackouts.update(closed)
+    providers = {k: v for k, v in providers.items() if k not in closed}
+    active -= closed
     unset = sorted(k for k in active if providers.get(k) not in ("ALS", "BLS"))
     if unset:
         examples = ", ".join(f"{d}:{s}" for d, s in unset[:6])
@@ -110,7 +114,9 @@ def load_config(path: str | Path) -> Configuration:
     wellness_capacity = wellness.get("capacity", 1)
     if type(wellness_enabled) is not bool or type(wellness_capacity) is not int or wellness_capacity < 1:
         raise ValueError("wellness_wagon.enabled must be true/false and capacity a positive integer")
-    wellness_keys = all_wellness_keys(dates) if wellness_enabled else []
+    wellness_keys = [k for k in all_wellness_keys(dates) if not any(
+        interval(k)[0] < interval(closed_key)[1] and interval(closed_key)[0] < interval(k)[1]
+        for closed_key in blackouts)] if wellness_enabled else []
     rules = cfg.get("rules", {})
     if not isinstance(rules, dict):
         raise ValueError("rules must be a JSON object")

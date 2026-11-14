@@ -109,8 +109,8 @@ def build_candidate(original: dict, submitted: dict) -> dict:
         missing = sorted(expected - set(providers)) if isinstance(providers, dict) else []
         extra = sorted(set(providers) - expected) if isinstance(providers, dict) else []
         raise EditorError(f"Provider grid must cover exactly the block shifts; missing: {missing[:4]}, extra: {extra[:4]}")
-    if any(v not in ("ALS", "BLS") for v in providers.values()):
-        raise EditorError("Each shift provider must be ALS or BLS")
+    if any(v not in ("ALS", "BLS", "CLOSED") for v in providers.values()):
+        raise EditorError("Each shift must be ALS, BLS, or CLOSED")
     cfg["shift_providers"] = {key: providers[key] for key in sorted(expected)}
 
     scalar_types = scalar_paths(original)

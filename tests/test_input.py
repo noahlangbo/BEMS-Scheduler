@@ -62,6 +62,26 @@ class InputTests(unittest.TestCase):
         self.assertNotIn((D, 'AM'), cfg.providers)
         self.assertEqual(cfg.campus_keys, [(D, 'C'), (D, 'D')])
 
+    def test_closed_shifts_remove_all_services_and_allow_reopening(self):
+        cfg = self.config(shift_providers={f'{D}:AM': 'CLOSED', f'{D}:PM': 'BLS',
+                                           f'{D}:NIGHT': 'CLOSED'},
+                          wellness_wagon={'enabled': True, 'capacity': 1})
+        self.assertEqual(cfg.providers, {(D, 'PM'): 'BLS'})
+        self.assertEqual(cfg.campus_keys, [(D, 'C'), (D, 'D')])
+        self.assertEqual(cfg.wellness_keys, [(D, 'WPM')])
+        reopened = self.config(shift_providers={f'{D}:AM': 'ALS', f'{D}:PM': 'BLS',
+                                                f'{D}:NIGHT': 'BLS'},
+                               wellness_wagon={'enabled': True, 'capacity': 1})
+        self.assertEqual(len(reopened.providers), 3)
+        self.assertEqual(len(reopened.campus_keys), 4)
+        self.assertEqual(len(reopened.wellness_keys), 2)
+
+    def test_closed_forced_crew_is_rejected(self):
+        with self.assertRaisesRegex(ValueError, 'inactive'):
+            self.config(shift_providers={f'{D}:AM': 'CLOSED', f'{D}:PM': 'BLS',
+                                         f'{D}:NIGHT': 'BLS'},
+                        forced_crews=[{'date': str(D), 'shift': 'AM', 'members': ['a@example.com']}])
+
     def test_invalid_caps_and_dates_are_rejected(self):
         for updates in ({'hours': {'ambulance_emt': 19}}, {'hours': {'campus_emt': -3}},
                         {'campus_capacity': 0}, {'solver_time_limit_s': -1},
