@@ -44,6 +44,8 @@ For new or corrected responses, download a fresh export and replace the input
 before running again. An older block's CSV has the right kind of format but the
 wrong availability dates.
 
+When starting a new block, use **Remove crews outside this block** in Forced crews after setting the dates. Existing crews remain visible and removable even when the response file cannot load; saving keeps a backup of the previous configuration.
+
 ## 3. Configure the block
 
 Open the browser editor from the desktop shortcut and update these settings for every new block. The editor validates the provider grid and can build supported priorities and hard requirements without JSON editing. You can still open `config.json` in a text editor for advanced changes:
